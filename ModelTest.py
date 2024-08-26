@@ -36,7 +36,7 @@ def process_image(image_path, model):
 
 def main():
     # Setze hier den Pfad zum hochgeladenen Bild
-    image_path = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Data/Test/0000c035a08c3770.jpg"
+    image_path = "/Users/saadbenboujina/Downloads/1/620_Fishfisher_24_2048x2048.jpg"
 
     if not os.path.exists('output'):
         os.makedirs('output')

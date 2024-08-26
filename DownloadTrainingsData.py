@@ -4,7 +4,7 @@ import fiftyone.zoo as foz
 
 # Define the label and number of images to download
 label_name = "Boat"
-num_images = 700
+num_images = 2000
 
 # Load the Open Images dataset with the specific label
 dataset = foz.load_zoo_dataset(
