@@ -2,8 +2,10 @@ import cv2
 import os
 from ultralytics import YOLO
 
-def process_media(media_path, model, output_dir='output'):
-    # Check if the file is a video or an image
+def process_media(media_path, model, output_dir='output', labels=None):
+    if labels is None:
+        labels = []
+
     is_video = media_path.endswith(('.mp4', '.avi', '.mov', '.mkv'))
 
     if not os.path.exists(output_dir):
@@ -39,17 +41,21 @@ def process_media(media_path, model, output_dir='output'):
             result = model.predict(frame)
             detections = result[0]
 
-            print(f"Processing frame {frame_count}/{total_frames}: Detected objects: {len(detections.boxes)}")
-
-            # Manually draw bounding boxes
+            detected_labels = []
             for box in detections.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])  # Bounding box coordinates
-                confidence = box.conf[0]  # Confidence score
-                label = f'{box.cls[0]} {confidence:.2f}'  # Label with class and confidence
+                class_id = int(box.cls[0])
+                label = model.names[class_id]
+                if label in labels:
+                    detected_labels.append(label)
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    confidence = box.conf[0]
+                    label_text = f'{label} {confidence:.2f}'
 
-                # Draw the bounding box on the frame
-                cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Green box with thickness 2
-                cv2.putText(frame, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)  # Green text
+                    # Draw the bounding box on the frame only for specified labels
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+            print(f"Processing frame {frame_count}/{total_frames}: Detected objects: {detected_labels}")
 
             # Show the frame with annotations
             cv2.imshow("Annotated Video", frame)
@@ -68,47 +74,47 @@ def process_media(media_path, model, output_dir='output'):
         print(f"Processed and saved video: {output_video_path}")
 
     else:
-        # Process image
         image = cv2.imread(media_path)
         if image is None:
             print(f"Error: Could not load image {media_path}")
             return
         print(f"Image loaded: {image.shape}")
 
-        # Inference with YOLO model
         result = model.predict(image)
         detections = result[0]
 
-        print(f"Detected objects: {len(detections.boxes)}")
-
-        # Manually draw bounding boxes
+        detected_labels = []
         for box in detections.boxes:
-            x1, y1, x2, y2 = map(int, box.xyxy[0])  # Bounding box coordinates
-            confidence = box.conf[0]  # Confidence score
-            label = f'{box.cls[0]} {confidence:.2f}'  # Label with class and confidence
+            class_id = int(box.cls[0])
+            label = model.names[class_id]
+            if label in labels:
+                detected_labels.append(label)
+                x1, y1, x2, y2 = map(int, box.xyxy[0])
+                confidence = box.conf[0]
+                label_text = f'{label} {confidence:.2f}'
 
-            # Draw the bounding box on the image
-            cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)  # Green box with thickness 2
-            cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)  # Green text
+                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.putText(image, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # Show the image with annotations
-        cv2.imshow("Annotated Image", image)
-        cv2.waitKey(0)  # Wait for a key press to close the image window
-        cv2.destroyAllWindows()
+        print(f"Detected objects: {detected_labels}")
 
-        output_image_path = os.path.join(output_dir, os.path.basename(media_path))
-        cv2.imwrite(output_image_path, image)
-        print(f"Processed and saved image: {output_image_path}")
+        if detected_labels:
+            cv2.imshow("Annotated Image", image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+            output_image_path = os.path.join(output_dir, os.path.basename(media_path))
+            cv2.imwrite(output_image_path, image)
+            print(f"Processed and saved image: {output_image_path}")
+        else:
+            print("No specified objects found in the image.")
 
 def main():
-    # Set the path to your media file (image or video)
     media_path = "/Users/saadbenboujina/Downloads/1/IMG_8861.mp4"
-
-    # Load your YOLO model
     model = YOLO("yolov8n.pt")
+    labels = [ "boat"]
 
-    # Process the media file
-    process_media(media_path, model)
+    process_media(media_path, model, labels=labels)
 
 if __name__ == '__main__':
     main()
