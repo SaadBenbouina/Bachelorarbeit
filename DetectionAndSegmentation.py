@@ -43,7 +43,7 @@ def process_media(media_path, model, output_dir='output', detection_labels=None,
             result = model.predict(frame)
             detections = result[0]
 
-            for box in detections.boxes:
+            for i, box in enumerate(detections.boxes):
                 class_id = int(box.cls[0])
                 label = model.names[class_id]
                 if label in detection_labels:
@@ -56,8 +56,8 @@ def process_media(media_path, model, output_dir='output', detection_labels=None,
                     cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
                     # Apply segmentation if the label is also in segmentation_labels
-                    if label in segmentation_labels and detections.masks:
-                        mask = detections.masks.data[int(box.cls[0])]
+                    if label in segmentation_labels and hasattr(detections, 'masks') and len(detections.masks.data) > i:
+                        mask = detections.masks.data[i]
                         mask = mask.cpu().numpy()
 
                         # Resize mask to match the frame dimensions
@@ -109,7 +109,7 @@ def process_media(media_path, model, output_dir='output', detection_labels=None,
                 cv2.putText(image, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
                 # Apply segmentation if the label is also in segmentation_labels
-                if label in segmentation_labels and detections.masks:
+                if label in segmentation_labels and hasattr(detections, 'masks') and len(detections.masks.data) > i:
                     try:
                         mask = detections.masks.data[i]
                         mask = mask.cpu().numpy()
