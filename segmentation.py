@@ -1,7 +1,7 @@
 import cv2
 import os
 from ultralytics import YOLO
-
+# Programm macht segmentation für Boat in ein Img
 def process_image_for_segmentation(image_path, model, output_dir='output', labels=None):
     if labels is None:
         labels = []
