@@ -6,25 +6,17 @@ from ultralytics import YOLO
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
 from detectron2 import model_zoo
-from PIL import Image
 
-# Check and use the correct Resampling attribute
-if not hasattr(Image, 'Resampling'):
-    Resampling = Image
-else:
-    Resampling = Image.Resampling
-
-# Example of setting LINEAR if needed
-if not hasattr(Resampling, 'LINEAR'):
-    Resampling.LINEAR = Resampling.BILINEAR  # or another available method
 
 def setup_panoptic_model():
     cfg = get_cfg()
     cfg.merge_from_file(model_zoo.get_config_file("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml"))
     cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml")
-    cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"  # Use GPU if available
+    # Use GPU if available
+    cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     panoptic_predictor = DefaultPredictor(cfg)
     return panoptic_predictor
+
 
 def process_media(media_path, yolo_model, panoptic_model, output_dir='output', detection_labels=None):
     if detection_labels is None:
@@ -143,6 +135,7 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
 
     return detected
 
+
 def main():
     media_path = "/Users/saadbenboujina/Downloads/1/620_Fishfisher_24_2048x2048.jpg"
     output_folder = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/JustInputWithBoat"
@@ -152,6 +145,7 @@ def main():
     detection_labels = ["boat"]  # Labels for detection
 
     process_media(media_path, yolo_model, panoptic_model, output_folder, detection_labels)
+
 
 if __name__ == '__main__':
     main()
