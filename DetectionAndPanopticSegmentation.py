@@ -1,12 +1,37 @@
-import cv2
 import os
+import cv2
 import numpy as np
-from fiftyone.utils.transformers import torch
 from ultralytics import YOLO
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
 from detectron2 import model_zoo
+from fiftyone.utils.transformers import torch
 
+def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
+    detected = False
+    detections = yolo_result[0]
+
+    for i, box in enumerate(detections.boxes):
+        class_id = int(box.cls[0])
+        label = yolo_model.names[class_id]
+        if label in detection_labels:
+            detected = True
+            x1, y1, x2, y2 = map(int, box.xyxy[0])
+            confidence = box.conf[0]
+            label_text = f'{label} {confidence:.2f}'
+
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    return detected
+
+def apply_panoptic_segmentation(frame, panoptic_result):
+    panoptic_seg = panoptic_result["panoptic_seg"][0].cpu().numpy()
+    segments_info = panoptic_result["panoptic_seg"][1]
+
+    for segment in segments_info:
+        mask = panoptic_seg == segment['id']
+        color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
+        frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5
 
 def setup_panoptic_model():
     cfg = get_cfg()
@@ -16,7 +41,6 @@ def setup_panoptic_model():
     cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     panoptic_predictor = DefaultPredictor(cfg)
     return panoptic_predictor
-
 
 def process_media(media_path, yolo_model, panoptic_model, output_dir='output', detection_labels=None):
     if detection_labels is None:
@@ -42,7 +66,7 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
         print(f"Video loaded: {frame_width}x{frame_height} at {fps} FPS with {total_frames} frames")
 
         output_video_path = os.path.join(output_dir, os.path.basename(media_path))
-        fourcc = cv2.VideoWriter.fourcc('M', 'P', '4', 'V')
+        fourcc = cv2.VideoWriter.fourcc('m', 'p', '4', 'v')
         out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
 
         frame_count = 0
@@ -55,28 +79,8 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
             yolo_result = yolo_model.predict(frame)
             panoptic_result = panoptic_model(frame)
 
-            detections = yolo_result[0]
-            panoptic_seg = panoptic_result["panoptic_seg"][0].cpu().numpy()
-            segments_info = panoptic_result["panoptic_seg"][1]
-
-            # Draw YOLO detections
-            for i, box in enumerate(detections.boxes):
-                class_id = int(box.cls[0])
-                label = yolo_model.names[class_id]
-                if label in detection_labels:
-                    detected = True
-                    x1, y1, x2, y2 = map(int, box.xyxy[0])
-                    confidence = box.conf[0]
-                    label_text = f'{label} {confidence:.2f}'
-
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-            # Visualize the panoptic segmentation on the frame
-            for segment in segments_info:
-                mask = panoptic_seg == segment['id']
-                color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
-                frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5
+            detected |= draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels)
+            apply_panoptic_segmentation(frame, panoptic_result)
 
             cv2.imshow('Processed Video', frame)
             if cv2.waitKey(1) & 0xFF == ord('q'):
@@ -101,28 +105,8 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
         yolo_result = yolo_model.predict(image)
         panoptic_result = panoptic_model(image)
 
-        detections = yolo_result[0]
-        panoptic_seg = panoptic_result["panoptic_seg"][0].cpu().numpy()
-        segments_info = panoptic_result["panoptic_seg"][1]
-
-        # Draw YOLO detections
-        for i, box in enumerate(detections.boxes):
-            class_id = int(box.cls[0])
-            label = yolo_model.names[class_id]
-            if label in detection_labels:
-                detected = True
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                confidence = box.conf[0]
-                label_text = f'{label} {confidence:.2f}'
-
-                cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                cv2.putText(image, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        # Visualize the panoptic segmentation on the image
-        for segment in segments_info:
-            mask = panoptic_seg == segment['id']
-            color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
-            image[mask] = image[mask] * 0.5 + np.array(color) * 0.5
+        detected = draw_yolo_detections(image, yolo_result, yolo_model, detection_labels)
+        apply_panoptic_segmentation(image, panoptic_result)
 
         cv2.imshow('Processed Image', image)
         cv2.waitKey(0)
@@ -135,9 +119,8 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
 
     return detected
 
-
 def main():
-    media_path = "/Users/saadbenboujina/Downloads/1/620_Fishfisher_24_2048x2048.jpg"
+    media_path = "/Users/saadbenboujina/Downloads/1/IMG_8861.mp4"
     output_folder = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/JustInputWithBoat"
     yolo_model = YOLO("yolov8n.pt")  # Load the YOLO model for detection
     panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
@@ -145,7 +128,6 @@ def main():
     detection_labels = ["boat"]  # Labels for detection
 
     process_media(media_path, yolo_model, panoptic_model, output_folder, detection_labels)
-
 
 if __name__ == '__main__':
     main()
