@@ -20,7 +20,7 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
             confidence = box.conf[0]
             label_text = f'{label} {confidence:.2f}'
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 4)
             cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     return detected
 
@@ -120,7 +120,7 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
     return detected
 
 def main():
-    media_path = "/Users/saadbenboujina/Downloads/1/IMG_8861.mp4"
+    media_path = "/Users/saadbenboujina/Downloads/1/2/image_1234561.jpg"
     output_folder = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/JustInputWithBoat"
     yolo_model = YOLO("yolov8n.pt")  # Load the YOLO model for detection
     panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
