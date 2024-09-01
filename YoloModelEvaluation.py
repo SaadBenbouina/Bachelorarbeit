@@ -31,7 +31,7 @@ model = YOLO("yolov8n.pt")  # ersetze durch den tatsächlichen Pfad zu deinem Mo
 
 # Definiere den Pfad zu deinem Datensatz und den Zielordner für Bilder mit niedrigem IoU
 data_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TestDataYolo"
-low_iou_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo"
+low_iou_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/0.7"
 
 # Erstelle den Ordner, falls er noch nicht existiert
 os.makedirs(low_iou_folder, exist_ok=True)
@@ -66,9 +66,10 @@ for result in results:
             max_iou = max(iou_values) if iou_values else 0
 
             # Check if the maximum IoU value is below 0.8
-            if max_iou < 0.8:
-                # Move the corresponding image to the target folder
+            if max_iou < 0.7:
+                # Move the corresponding image and its label file to the target folder
                 shutil.move(result.path, os.path.join(low_iou_folder, image_name))
-                print(f"Bild {image_name} wurde verschoben, da der IoU unter 0.8 liegt.")
-            break  # Move the image if any box does not match well
+                shutil.move(annotation_file, os.path.join(low_iou_folder, os.path.basename(annotation_file)))
+                print(f"Bild {image_name} und sein Label wurden verschoben, da der IoU unter 0.8 liegt.")
+                break  # Move the image and label if any box does not match welly
 print("Evaluierung abgeschlossen.")
