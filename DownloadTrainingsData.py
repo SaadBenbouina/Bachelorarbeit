@@ -16,8 +16,8 @@ dataset = foz.load_zoo_dataset(
 )
 
 # Set the directory where images and labels will be saved
-images_dir = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Data/Train/images"  # Pfad für Bilder
-labels_dir = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Data/Train/labels"  # Pfad für Labels
+images_dir = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TestDataYolo"  # Pfad für Bilder
+labels_dir = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TestDataYolo"  # Pfad für Labels
 
 # Ensure the output directories exist
 if not os.path.exists(images_dir):

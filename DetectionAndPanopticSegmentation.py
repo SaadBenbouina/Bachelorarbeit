@@ -120,7 +120,7 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
     return detected
 
 def main():
-    media_path = "/Users/saadbenboujina/Downloads/1/2/image_1234567_0.jpg"
+    media_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TestDataYolo/0a0a1a01c23567a0.jpg"
     output_folder = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/JustInputWithBoat"
     yolo_model = YOLO("yolov8n.pt")  # Load the YOLO model for detection
     panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
