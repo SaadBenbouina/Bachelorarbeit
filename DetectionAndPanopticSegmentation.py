@@ -1,27 +1,27 @@
 import os
 import cv2
 import numpy as np
-from ultralytics import YOLO
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
 from detectron2 import model_zoo
-from fiftyone.utils.transformers import torch
+import torch  # Corrected the import statement
 
-def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
+def draw_detectron_detections(frame, detectron_result, detection_labels):
     detected = False
-    detections = yolo_result[0]
+    instances = detectron_result["instances"]
 
-    for i, box in enumerate(detections.boxes):
-        class_id = int(box.cls[0])
-        label = yolo_model.names[class_id]
-        if label in detection_labels:
-            detected = True
-            x1, y1, x2, y2 = map(int, box.xyxy[0])
-            confidence = box.conf[0]
-            label_text = f'{label} {confidence:.2f}'
-
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 4)
-            cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    for i in range(len(instances)):
+        class_id = int(instances.pred_classes[i])
+        score = instances.scores[i].item()
+        if score >= 0.5:  # Added a threshold for detection score
+            if class_id < len(detection_labels):
+                label = detection_labels[class_id]
+                detected = True
+                box = instances.pred_boxes[i].tensor.cpu().numpy().astype(int)[0]
+                label_text = f'{label} {score:.2f}'
+                # Draw the rectangle and label
+                cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 4)
+                cv2.putText(frame, label_text, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     return detected
 
 def apply_panoptic_segmentation(frame, panoptic_result):
@@ -37,12 +37,35 @@ def setup_panoptic_model():
     cfg = get_cfg()
     cfg.merge_from_file(model_zoo.get_config_file("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml"))
     cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml")
-    # Use GPU if available
     cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     panoptic_predictor = DefaultPredictor(cfg)
     return panoptic_predictor
 
-def process_media(media_path, yolo_model, panoptic_model, output_dir='output', detection_labels=None):
+def setup_detectron_model():
+    cfg = get_cfg()
+    cfg.merge_from_file(model_zoo.get_config_file("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml"))
+    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-Detection/faster_rcnn_R_50_FPN_3x.yaml")
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # Set a threshold for detection
+    cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    detectron_predictor = DefaultPredictor(cfg)
+    return detectron_predictor
+
+def visualize_detections(frame, detectron_result):
+    instances = detectron_result["instances"]
+    boxes = instances.pred_boxes.tensor.cpu().numpy()
+    scores = instances.scores.cpu().numpy()
+    classes = instances.pred_classes.cpu().numpy()
+
+    for i in range(len(boxes)):
+        box = boxes[i].astype(int)
+        label_text = f'Class: {classes[i]}, Score: {scores[i]:.2f}'
+        frame = cv2.rectangle(frame, (box[0], box[1]), (box[2], box[3]), (0, 255, 0), 2)
+        frame = cv2.putText(frame, label_text, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+    cv2.imshow("Detections", frame)
+    cv2.waitKey(1)
+
+def process_media(media_path, detectron_model, panoptic_model, output_dir='output', detection_labels=None):
     if detection_labels is None:
         detection_labels = []
 
@@ -76,15 +99,13 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
             if not ret:
                 break
 
-            yolo_result = yolo_model.predict(frame)
+            detectron_result = detectron_model(frame)
             panoptic_result = panoptic_model(frame)
 
-            detected |= draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels)
+            detected |= draw_detectron_detections(frame, detectron_result, detection_labels)
             apply_panoptic_segmentation(frame, panoptic_result)
 
-            cv2.imshow('Processed Video', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+            visualize_detections(frame, detectron_result)  # Visualize detections for debugging
 
             print(f"Processing frame {frame_count}/{total_frames}")
             out.write(frame)
@@ -102,15 +123,13 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
             return detected
         print(f"Image loaded: {image.shape}")
 
-        yolo_result = yolo_model.predict(image)
+        detectron_result = detectron_model(image)
         panoptic_result = panoptic_model(image)
 
-        detected = draw_yolo_detections(image, yolo_result, yolo_model, detection_labels)
+        detected = draw_detectron_detections(image, detectron_result, detection_labels)
         apply_panoptic_segmentation(image, panoptic_result)
 
-        cv2.imshow('Processed Image', image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        visualize_detections(image, detectron_result)  # Visualize detections for debugging
 
         if detected:
             output_image_path = os.path.join(output_dir, os.path.basename(media_path))
@@ -120,14 +139,14 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
     return detected
 
 def main():
-    media_path = "/Users/saadbenboujina/Downloads/1/2/image_1234567_0.jpg"
+    media_path = "/Users/saadbenboujina/Downloads/1/2/image_1234560_0.jpg"
     output_folder = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/JustInputWithBoat"
-    yolo_model = YOLO("yolov8n.pt")  # Load the YOLO model for detection
+    detectron_model = setup_detectron_model()  # Load the Detectron2 model for detection
     panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
 
     detection_labels = ["boat"]  # Labels for detection
 
-    process_media(media_path, yolo_model, panoptic_model, output_folder, detection_labels)
+    process_media(media_path, detectron_model, panoptic_model, output_folder, detection_labels)
 
 if __name__ == '__main__':
     main()
