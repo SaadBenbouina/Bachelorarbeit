@@ -63,7 +63,6 @@ def visualize_detections(frame, detectron_result):
         frame = cv2.putText(frame, label_text, (box[0], box[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
     cv2.imshow("Detections", frame)
-    cv2.waitKey(1)
 
 def process_media(media_path, detectron_model, panoptic_model, output_dir='output', detection_labels=None):
     if detection_labels is None:
@@ -131,6 +130,13 @@ def process_media(media_path, detectron_model, panoptic_model, output_dir='outpu
 
         visualize_detections(image, detectron_result)  # Visualize detections for debugging
 
+        # Keep the window open until 'q' is pressed
+        while True:
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
+        cv2.destroyAllWindows()
+
         if detected:
             output_image_path = os.path.join(output_dir, os.path.basename(media_path))
             cv2.imwrite(output_image_path, image)
@@ -139,12 +145,12 @@ def process_media(media_path, detectron_model, panoptic_model, output_dir='outpu
     return detected
 
 def main():
-    media_path = "/Users/saadbenboujina/Downloads/1/2/image_1234560_0.jpg"
+    media_path = "/Users/saadbenboujina/Downloads/1/2/image_1234563_0.jpg"
     output_folder = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/JustInputWithBoat"
     detectron_model = setup_detectron_model()  # Load the Detectron2 model for detection
     panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
 
-    detection_labels = ["boat"]  # Labels for detection
+    detection_labels = ["boat"]  # Labels for detectionq
 
     process_media(media_path, detectron_model, panoptic_model, output_folder, detection_labels)
 
