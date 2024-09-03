@@ -1,10 +1,13 @@
 # Paths to the data
-path: /var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Data
-train: /var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Data/Train
-val: /var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Data/Train
+path: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo
+train: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
+val: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
+test: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
 
 
+
+nc: 1
 # Main categories
 categories:
-  0: "Boat"
+  0: "boat"
 

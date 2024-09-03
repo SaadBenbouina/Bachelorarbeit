@@ -1,11 +1,11 @@
-import os
 import cv2
 import numpy as np
 from ultralytics import YOLO
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
 from detectron2 import model_zoo
-from fiftyone.utils.transformers import torch
+import torch
+
 
 def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
     detected = False
@@ -24,6 +24,7 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
             cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
     return detected
 
+
 def apply_panoptic_segmentation(frame, panoptic_result):
     panoptic_seg = panoptic_result["panoptic_seg"][0].cpu().numpy()
     segments_info = panoptic_result["panoptic_seg"][1]
@@ -33,25 +34,23 @@ def apply_panoptic_segmentation(frame, panoptic_result):
         color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
         frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5
 
+
 def setup_panoptic_model():
     cfg = get_cfg()
     cfg.merge_from_file(model_zoo.get_config_file("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml"))
     cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml")
-    # Use GPU if available
     cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     panoptic_predictor = DefaultPredictor(cfg)
     return panoptic_predictor
 
-def process_media(media_path, yolo_model, panoptic_model, output_dir='output', detection_labels=None):
+
+def process_media(media_path, yolo_model, panoptic_model, detection_labels=None):
     if detection_labels is None:
         detection_labels = []
 
     is_video = media_path.endswith(('.mp4', '.avi', '.mov', '.mkv'))
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    detected = False  # To track if the object is detected in the media
+    detected = False
 
     if is_video:
         cap = cv2.VideoCapture(media_path)
@@ -64,10 +63,6 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
         fps = cap.get(cv2.CAP_PROP_FPS)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         print(f"Video loaded: {frame_width}x{frame_height} at {fps} FPS with {total_frames} frames")
-
-        output_video_path = os.path.join(output_dir, os.path.basename(media_path))
-        fourcc = cv2.VideoWriter.fourcc('m', 'p', '4', 'v')
-        out = cv2.VideoWriter(output_video_path, fourcc, fps, (frame_width, frame_height))
 
         frame_count = 0
 
@@ -87,13 +82,10 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
                 break
 
             print(f"Processing frame {frame_count}/{total_frames}")
-            out.write(frame)
             frame_count += 1
 
         cap.release()
-        out.release()
         cv2.destroyAllWindows()
-        print(f"Processed and saved video: {output_video_path}")
 
     else:
         image = cv2.imread(media_path)
@@ -112,22 +104,18 @@ def process_media(media_path, yolo_model, panoptic_model, output_dir='output', d
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
-        if detected:
-            output_image_path = os.path.join(output_dir, os.path.basename(media_path))
-            cv2.imwrite(output_image_path, image)
-            print(f"Processed and saved image: {output_image_path}")
-
     return detected
 
+
 def main():
-    media_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TestDataYolo/0a0a1a01c23567a0.jpg"
-    output_folder = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/JustInputWithBoat"
-    yolo_model = YOLO("yolov8n.pt")  # Load the YOLO model for detection
+    media_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/test/image_123575_0_jpg.rf.ed3a5875a026af65e36d4f7eac869868.jpg"
+    yolo_model = YOLO("/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/boat_detection_model3/weights/best.pt")  # Load the YOLO model for detection
     panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
 
-    detection_labels = ["boat"]  # Labels for detection
+    detection_labels = ["class_0"]  # Labels for detection
 
-    process_media(media_path, yolo_model, panoptic_model, output_folder, detection_labels)
+    process_media(media_path, yolo_model, panoptic_model, detection_labels)
+
 
 if __name__ == '__main__':
     main()

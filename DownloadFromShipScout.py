@@ -79,13 +79,13 @@ def save_images_and_labels(image_urls, labels, output_dir='downloaded_images', p
 
                 # Save the corresponding label in a .txt file
                 label_filename = f'image_{process_id}_{index}.txt'
-                label_path = os.path.join(output_dir, label_filename)
-                with open(label_path, 'w') as label_file:
-                    if labels and len(labels) > index:
-                        label_file.write(labels[index])
-                    else:
-                        label_file.write("No label found")
-                print(f"Label saved to {label_path}")
+                #label_path = os.path.join(output_dir, label_filename)
+                #with open(label_path, 'w') as label_file:
+                #    if labels and len(labels) > index:
+                #        label_file.write(labels[index])
+                #    else:
+                #        label_file.write("No label found")
+                #-print(f"Label saved to {label_path}")
             else:
                 print(f"No valid image URL provided for process_id {process_id}")
     except Exception as e:
@@ -96,9 +96,9 @@ def save_images_and_labels(image_urls, labels, output_dir='downloaded_images', p
 
 def main():
     # Iterate over a range of process_ids
-    for i in range(1234560, 1234568):
+    for i in range(1234960, 1235168):
         process_id = i
-        output_folder = "/Users/saadbenboujina/Downloads/1/2"
+        output_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/FromShipScout"
 
         # Step 1: Download images from shipspotting.com
         image_urls, labels = download_images_from_shipspotting(process_id)
