@@ -5,7 +5,7 @@ model = YOLO("/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bache
 # Use the model
 
 results =model.train(
-data="config.yaml",epochs=15,
+data="config.yaml",epochs=20,
 imgsz=640,
 name="boat_detection_yolo_model_new",
 project="/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit",
