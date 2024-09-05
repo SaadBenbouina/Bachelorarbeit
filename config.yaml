@@ -8,6 +8,5 @@ test: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
 
 nc: 1
 # Main categories
-categories:
-  0: "boat"
+names: ["boat"]
 

@@ -1,7 +1,3 @@
-import glob
-import os
-import random
-
 import cv2
 import matplotlib.pyplot as plt
 
@@ -14,10 +10,9 @@ def yolo2bbox(bboxes):
     ymax = bboxes[1] + bboxes[3] / 2
     return xmin, ymin, xmax, ymax
 
-# Function to plot the bounding boxes on their respective images.
+# Function to plot the bounding boxes on the image.
 def plot_box(image, bboxes, labels):
-    # Need the image height and width to denormalize the bounding box coordinates.
-    h, w, _ = image.shape
+    h, w, _ = image.shape  # Image dimensions
 
     for box_num, box in enumerate(bboxes):
         x1, y1, x2, y2 = yolo2bbox(box)
@@ -38,48 +33,37 @@ def plot_box(image, bboxes, labels):
         )
 
     return image
-# Function to plot images with the bounding boxes.
-def plot(image_paths, label_paths, num_samples):
-    all_images = []
-    all_images.extend(glob.glob(image_paths + '/*.jpg'))
-    all_images.extend(glob.glob(image_paths + '/*.JPG'))
 
-    all_images.sort()
+# Function to process one image and its bounding box labels.
+def plot_single_image(image_path, label_path):
+    image_name = image_path.split('/')[-1].split('.')[0]
+    image = cv2.imread(image_path)
 
-    num_images = len(all_images)
+    with open(label_path, 'r') as f:
+        bboxes = []
+        labels = []
+        lines = f.readlines()
+        for label_line in lines:
+            label = label_line[0]
+            bbox_string = label_line[2:]
+            x_c, y_c, w, h = bbox_string.split(' ')
+            x_c = float(x_c)
+            y_c = float(y_c)
+            w = float(w)
+            h = float(h)
+            bboxes.append([x_c, y_c, w, h])
+            labels.append(label)
 
-    plt.figure(figsize=(15, 12))
-    for i in range(num_samples):
-        j = random.randint(0, num_images - 1)
-        image_name = all_images[j]
-        image_name = '.'.join(image_name.split(os.path.sep)[-1].split('.')[:-1])
-        image = cv2.imread(all_images[j])
+    # Plotting the bounding boxes on the image
+    result_image = plot_box(image, bboxes, labels)
 
-        with open(os.path.join(label_paths, image_name + '.txt'), 'r') as f:
-            bboxes = []
-            labels = []
-            lines = f.readlines()
-            for label_line in lines:
-                label = label_line[0]
-                bbox_string = label_line[2:]
-                x_c, y_c, w, h = bbox_string.split(' ')
-                x_c = float(x_c)
-                y_c = float(y_c)
-                w = float(w)
-                h = float(h)
-                bboxes.append([x_c, y_c, w, h])
-                labels.append(label)
-
-        result_image = plot_box(image, bboxes, labels)
-        plt.subplot(2, 2, i+1)
-        plt.imshow(result_image[:, :, ::-1])
-
-    plt.subplots_adjust(wspace=1)
-    plt.tight_layout()
+    # Display the result
+    plt.imshow(result_image[:, :, ::-1])
+    plt.axis('off')
     plt.show()
-#Visualiziation
-plot(
-    image_paths="/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/just for plotbox",
-    label_paths="/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/just for plotbox",
-    num_samples=1,
+
+# Visualization for one specific image and its corresponding label file
+plot_single_image(
+    image_path="/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335717_0_jpg.rf.d44d2d834be0eca702ff7655d000d661.jpg",
+    label_path="/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335717_0_jpg.rf.d44d2d834be0eca702ff7655d000d661.txt"
 )

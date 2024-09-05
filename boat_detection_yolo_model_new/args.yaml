@@ -1,8 +1,8 @@
 task: detect
 mode: train
-model: /var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/boat_detection_yolo_model/weights/best.pt
+model: yolov8n.pt
 data: config.yaml
-epochs: 20
+epochs: 15
 time: null
 patience: 100
 batch: 16

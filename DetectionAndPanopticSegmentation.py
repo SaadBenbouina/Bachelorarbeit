@@ -20,8 +20,26 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
             confidence = box.conf[0]
             label_text = f'{label} {confidence:.2f}'
 
-            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 4)
-            cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            # Draw the bounding box
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+            # Put the label and confidence score above the bounding box
+            text_size = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
+            text_x = x1
+            text_y = y1 - 10 if y1 - 10 > 10 else y1 + 10
+
+            # Draw the text background for better visibility
+            cv2.rectangle(frame, (text_x, text_y - text_size[1]),
+                          (text_x + text_size[0], text_y), (0, 255, 0), -1)
+
+            # Put the text (label and confidence score)
+            cv2.putText(frame, label_text, (text_x, text_y),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+
+            # Ausgabe der Koordinaten im Terminal
+            print(f"Detected {label} with confidence {confidence:.2f} at coordinates: ({x1}, {y1}), ({x2}, {y2})")
+
+
     return detected
 
 
@@ -108,11 +126,12 @@ def process_media(media_path, yolo_model, panoptic_model, detection_labels=None)
 
 
 def main():
-    media_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/test/image_123575_0_jpg.rf.ed3a5875a026af65e36d4f7eac869868.jpg"
-    yolo_model = YOLO("/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/boat_detection_model3/weights/best.pt")  # Load the YOLO model for detection
+    media_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335717_0_jpg.rf.d44d2d834be0eca702ff7655d000d661.jpg"
+    yolo_model = YOLO("yolov8n.pt")  # build a new model from scratch
+
     panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
 
-    detection_labels = ["class_0"]  # Labels for detection
+    detection_labels = ["boat"]  # Labels for detection
 
     process_media(media_path, yolo_model, panoptic_model, detection_labels)
 
