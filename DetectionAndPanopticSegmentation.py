@@ -30,7 +30,9 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
     for i, box in enumerate(detections.boxes):
         class_id = int(box.cls[0])
         label = yolo_model.names[class_id]
-        if label in detection_labels:
+        confidence = box.conf[0]
+        # Only draw bounding box if confidence is greater than 0.5
+        if confidence > 0.5 and label in detection_labels:
             detected = True
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             confidence = box.conf[0]
@@ -98,16 +100,16 @@ def process_image(image, yolo_model, panoptic_model, detection_labels, url, phot
     image_path = save_image(image_np, "processed_images", f"{process_id}_processed.jpg")
 
     # Create XML structure
-    image_metadata = ET.Element("image", id=str(process_id), name=f"{photo_label}.jpg", width=str(width), height=str(height))
+    image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", width=str(width), height=str(height))
+    print(panoptic_result["instances"])
     for idx in range(len(panoptic_result["instances"])):
         mask = panoptic_result["panoptic_seg"][0].cpu().numpy() == idx
         mask = mask.astype(np.uint8)
         rle = mask_to_rle(mask)
 
-        mask_element = ET.SubElement(image_metadata, "mask", label="segment", source="auto")
+        mask_element = ET.SubElement(image_metadata, "mask", label="segment")
         rle_str = ', '.join(str(count) for count in rle["counts"])
         mask_element.set("rle", rle_str)
-        ET.SubElement(mask_element, "attribute", name="type", source="auto").text = photo_label
 
     return image_metadata, image_path
 
@@ -183,7 +185,7 @@ def main():
     panoptic_model = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id = 1334001  # Example ShipSpotting image ID
+    process_id = 1334000  # Example ShipSpotting image ID
     xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detection_labels)
 
     if xml_data:
