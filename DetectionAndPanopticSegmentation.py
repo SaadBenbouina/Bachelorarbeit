@@ -46,10 +46,6 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
 
 # Panoptic segmentation on the frame
 def apply_panoptic_segmentation(frame, panoptic_result):
-    if panoptic_result is None:
-        print("Panoptic segmentation result is None")
-        return
-
     panoptic_seg = panoptic_result["panoptic_seg"][0].cpu().numpy()
     segments_info = panoptic_result["instances"]
 
@@ -133,6 +129,17 @@ def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detec
         # Use the same image scraping logic from the original code
         divs = soup.find_all('div', class_='summary-photo__image-row__image')
         image_urls = [div.find('img')['src'] for div in divs if div.find('img')]
+        label_divs = soup.find_all('div',
+                                   class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item summary-photo__card-general__label')
+        label_text = ""
+        for div in label_divs:
+            information_title = div.find('span', class_='information-item__title')
+            if information_title and information_title.text.strip() == "Photo Category:":
+                label_value = div.find('span', class_='information-item__value')
+                if label_value:
+                    # Extract the category text
+                    label_text = label_value.text.strip()
+                    break
 
         if not image_urls:
             print(f"No image found for process_id: {process_id}")
@@ -146,7 +153,7 @@ def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detec
         image_response = requests.get(image_url, headers=headers)
         image = Image.open(io.BytesIO(image_response.content))
 
-        label = ShipLabelFilter.filter_label("ship")
+        label = ShipLabelFilter.filter_label(label_text)
         print(f"Processing ship image with label: {label[0]}")
 
         xml_data = process_image(image, yolo_model, panoptic_model, detection_labels, image_url, label[0], process_id, debug=True)
@@ -180,7 +187,7 @@ def main():
     xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detection_labels)
 
     if xml_data:
-        save_xml(xml_data, f"ship_annotation_{process_id}.xml", "processed_images")
+        save_xml(xml_data, f"{process_id}_processed.xml", "processed_images")
 
 if __name__ == "__main__":
     main()

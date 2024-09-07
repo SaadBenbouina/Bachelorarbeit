@@ -108,7 +108,7 @@ def save_images_and_labels(image_urls, labels, output_dir='downloaded_images', p
 
 def main():
     # Iterate over a range of process_ids
-    for i in range(1334410, 1336000):
+    for i in range(1134410, 1136000):
         process_id = i
         output_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/FromShipScout"
 
