@@ -3,6 +3,14 @@ import requests
 from bs4 import BeautifulSoup
 
 
+# Define headers for the requests
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'Referer': 'https://www.shipspotting.com',
+    'Accept-Language': 'en-US,en;q=0.9',
+}
+
+
 # Function to download images from shipspotting.com based on a process_id
 def download_images_from_shipspotting(process_id, url_prefix='https://www.shipspotting.com/photos/'):
     image_urls = []
@@ -15,8 +23,8 @@ def download_images_from_shipspotting(process_id, url_prefix='https://www.shipsp
     print(f"Fetching URL: {url}")
 
     try:
-        # Send an HTTP GET request to the URL to retrieve the page
-        response = requests.get(url)
+        # Send an HTTP GET request to the URL with the headers
+        response = requests.get(url, headers=HEADERS)
         # Check if the request was successful (status code 200)
         if response.status_code != 200:
             print(f"Error: Received status code {response.status_code} from {url}")
@@ -67,8 +75,8 @@ def save_images_and_labels(image_urls, labels, output_dir='downloaded_images', p
             # Check if a valid image URL is provided
             if image_url:
                 print(f"Downloading image from {image_url}")
-                # Download the image data
-                image_data = requests.get(image_url).content
+                # Download the image data with headers
+                image_data = requests.get(image_url, headers=HEADERS).content
 
                 # Create a unique filename using the process_id and index
                 image_filename = f'image_{process_id}_{index}.jpg'
