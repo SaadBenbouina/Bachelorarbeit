@@ -93,6 +93,11 @@ def process_image(image, yolo_model, panoptic_model, detection_labels, url, phot
     draw_yolo_detections(image_np, yolo_result, yolo_model, detection_labels)
     apply_panoptic_segmentation(image_np, panoptic_result)
 
+    # Display the image in a window using OpenCV
+    cv2.imshow(f"Processed Image: {photo_label}", image_np)
+    cv2.waitKey(0)  # Wait for a key press to close the window
+    cv2.destroyAllWindows()  # Close the window
+
     # Save the processed image
     image_path = save_image(image_np, "processed_images", f"{process_id}_processed.jpg")
 
