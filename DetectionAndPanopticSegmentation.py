@@ -127,7 +127,7 @@ def process_media(media_path, yolo_model, panoptic_model, detection_labels=None)
 
 def main():
     media_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335717_0_jpg.rf.d44d2d834be0eca702ff7655d000d661.jpg"
-    yolo_model = YOLO("yolov8n.pt")  # build a new model from scratch
+    yolo_model = YOLO("boat_detection_yolo_model_new/weights/best.pt")  # build a new model from scratch
 
     panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
 
