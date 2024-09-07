@@ -1,12 +1,28 @@
 import cv2
 import numpy as np
+import requests
 from ultralytics import YOLO
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
 from detectron2 import model_zoo
 import torch
+from bs4 import BeautifulSoup
+import io
+from PIL import Image
+import xml.etree.ElementTree as ET
+from ShipLabelFilter import ShipLabelFilter
+import os
+import pycocotools.mask as mask_util
 
+# Setup Panoptic Segmentation Model
+def setup_panoptic_model():
+    cfg = get_cfg()
+    cfg.merge_from_file(model_zoo.get_config_file("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml"))
+    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml")
+    cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    return DefaultPredictor(cfg)
 
+# Perform YOLO object detection
 def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
     detected = False
     detections = yolo_result[0]
@@ -20,121 +36,137 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
             confidence = box.conf[0]
             label_text = f'{label} {confidence:.2f}'
 
-            # Draw the bounding box
+            # Draw bounding box
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # Put label and confidence
+            cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-            # Put the label and confidence score above the bounding box
-            text_size = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2)[0]
-            text_x = x1
-            text_y = y1 - 10 if y1 - 10 > 10 else y1 + 10
-
-            # Draw the text background for better visibility
-            cv2.rectangle(frame, (text_x, text_y - text_size[1]),
-                          (text_x + text_size[0], text_y), (0, 255, 0), -1)
-
-            # Put the text (label and confidence score)
-            cv2.putText(frame, label_text, (text_x, text_y),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
-
-            # Ausgabe der Koordinaten im Terminal
             print(f"Detected {label} with confidence {confidence:.2f} at coordinates: ({x1}, {y1}), ({x2}, {y2})")
-
-
     return detected
 
-
+# Panoptic segmentation on the frame
 def apply_panoptic_segmentation(frame, panoptic_result):
+    if panoptic_result is None:
+        print("Panoptic segmentation result is None")
+        return
+
     panoptic_seg = panoptic_result["panoptic_seg"][0].cpu().numpy()
-    segments_info = panoptic_result["panoptic_seg"][1]
+    segments_info = panoptic_result["instances"]
 
-    for segment in segments_info:
-        mask = panoptic_seg == segment['id']
+    # Iterate through segments to apply the mask and assign random colors
+    for idx in range(len(segments_info)):
+        mask = panoptic_seg == idx
         color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
-        frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5
+        frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5  # Blend the mask with color
 
+# Convert mask to RLE format for XML storage
+def mask_to_rle(mask):
+    rle = mask_util.encode(np.asfortranarray(mask.astype(np.uint8)))
+    return rle
 
-def setup_panoptic_model():
-    cfg = get_cfg()
-    cfg.merge_from_file(model_zoo.get_config_file("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml"))
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml")
-    cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    panoptic_predictor = DefaultPredictor(cfg)
-    return panoptic_predictor
+# Save processed image
+def save_image(image_np, path, filename):
+    if not os.path.exists(path):
+        os.makedirs(path)
+    image_path = os.path.join(path, filename)
+    cv2.imwrite(image_path, image_np)  # Save the image
+    return image_path
 
+# Process images for detection, segmentation, and classification
+def process_image(image, yolo_model, panoptic_model, detection_labels, url, photo_label, process_id, debug=True):
+    image_np = np.array(image)
+    width, height = image.size
 
-def process_media(media_path, yolo_model, panoptic_model, detection_labels=None):
-    if detection_labels is None:
-        detection_labels = []
+    if debug:
+        print(f"Processing image from URL: {url}")
 
-    is_video = media_path.endswith(('.mp4', '.avi', '.mov', '.mkv'))
+    # Perform YOLO detection
+    yolo_result = yolo_model.predict(image_np)
+    panoptic_result = panoptic_model(image_np)
 
-    detected = False
+    # Check if panoptic_result contains the required keys
+    if "panoptic_seg" not in panoptic_result or "instances" not in panoptic_result:
+        print(f"Panoptic segmentation did not return the expected result: {panoptic_result.keys()}")
+        return None
 
-    if is_video:
-        cap = cv2.VideoCapture(media_path)
-        if not cap.isOpened():
-            print(f"Error: Could not open video {media_path}")
-            return detected
+    # Draw YOLO detections and apply panoptic segmentation
+    draw_yolo_detections(image_np, yolo_result, yolo_model, detection_labels)
+    apply_panoptic_segmentation(image_np, panoptic_result)
 
-        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        print(f"Video loaded: {frame_width}x{frame_height} at {fps} FPS with {total_frames} frames")
+    # Save the processed image
+    image_path = save_image(image_np, "processed_images", f"{process_id}_processed.jpg")
 
-        frame_count = 0
+    # Create XML structure
+    image_metadata = ET.Element("image", id=str(process_id), name=f"{photo_label}.jpg", width=str(width), height=str(height))
+    for idx in range(len(panoptic_result["instances"])):
+        mask = panoptic_result["panoptic_seg"][0].cpu().numpy() == idx
+        mask = mask.astype(np.uint8)
+        rle = mask_to_rle(mask)
 
-        while cap.isOpened():
-            ret, frame = cap.read()
-            if not ret:
-                break
+        mask_element = ET.SubElement(image_metadata, "mask", label="segment", source="auto")
+        rle_str = ', '.join(str(count) for count in rle["counts"])
+        mask_element.set("rle", rle_str)
+        ET.SubElement(mask_element, "attribute", name="type", source="auto").text = photo_label
 
-            yolo_result = yolo_model.predict(frame)
-            panoptic_result = panoptic_model(frame)
+    return image_metadata
 
-            detected |= draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels)
-            apply_panoptic_segmentation(frame, panoptic_result)
+# Scrape images from ShipSpotting and process them
+def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detection_labels):
+    url_prefix = 'https://www.shipspotting.com/photos/'
+    url = f"{url_prefix}{str(process_id).zfill(7)}"
 
-            cv2.imshow('Processed Video', frame)
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': 'https://www.shipspotting.com',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
 
-            print(f"Processing frame {frame_count}/{total_frames}")
-            frame_count += 1
+    try:
+        response = requests.get(url, headers=headers)
+        soup = BeautifulSoup(response.text, 'html.parser')
 
-        cap.release()
-        cv2.destroyAllWindows()
+        # Use the same image scraping logic from the original code
+        divs = soup.find_all('div', class_='summary-photo__image-row__image')
+        image_urls = [div.find('img')['src'] for div in divs if div.find('img')]
 
-    else:
-        image = cv2.imread(media_path)
-        if image is None:
-            print(f"Error: Could not load image {media_path}")
-            return detected
-        print(f"Image loaded: {image.shape}")
+        if not image_urls:
+            print(f"No image found for process_id: {process_id}")
+            return None
 
-        yolo_result = yolo_model.predict(image)
-        panoptic_result = panoptic_model(image)
+        image_url = image_urls[0]
+        if image_url.startswith('/'):
+            image_url = 'https://www.shipspotting.com' + image_url
 
-        detected = draw_yolo_detections(image, yolo_result, yolo_model, detection_labels)
-        apply_panoptic_segmentation(image, panoptic_result)
+        print(f"Downloading image from: {image_url}")
+        image_response = requests.get(image_url, headers=headers)
+        image = Image.open(io.BytesIO(image_response.content))
 
-        cv2.imshow('Processed Image', image)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
+        label = ShipLabelFilter.filter_label("ship")
+        print(f"Processing ship image with label: {label[0]}")
 
-    return detected
+        xml_data = process_image(image, yolo_model, panoptic_model, detection_labels, image_url, label[0], process_id, debug=True)
 
+        return xml_data
+    except Exception as e:
+        print(f"Error processing image: {e}")
+        return None
 
+# Save XML file with detection, segmentation, and classification data
+def save_xml(xml_data, file_name="output.xml"):
+    tree = ET.ElementTree(xml_data)
+    tree.write(file_name)
+
+# Main function to execute the scraping and processing
 def main():
-    media_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335717_0_jpg.rf.d44d2d834be0eca702ff7655d000d661.jpg"
-    yolo_model = YOLO("boat_detection_yolo_model_new/weights/best.pt")  # build a new model from scratch
+    yolo_model = YOLO("boat_detection_yolo_model_new/weights/best.pt")
+    panoptic_model = setup_panoptic_model()
+    detection_labels = ["boat"]
 
-    panoptic_model = setup_panoptic_model()  # Set up the panoptic segmentation model
+    process_id = 1334001  # Example ShipSpotting image ID
+    xml_data = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detection_labels)
 
-    detection_labels = ["boat"]  # Labels for detection
+    if xml_data:
+        save_xml(xml_data, f"ship_annotation_{process_id}.xml")
 
-    process_media(media_path, yolo_model, panoptic_model, detection_labels)
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

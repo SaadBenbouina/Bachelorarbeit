@@ -2,6 +2,7 @@ import os
 import requests
 from bs4 import BeautifulSoup
 
+
 # Function to download images from shipspotting.com based on a process_id
 def download_images_from_shipspotting(process_id, url_prefix='https://www.shipspotting.com/photos/'):
     image_urls = []
@@ -35,7 +36,8 @@ def download_images_from_shipspotting(process_id, url_prefix='https://www.shipsp
                 image_urls.append(img_tag['src'])
 
         # Find the "Photo Category" label
-        label_divs = soup.find_all('div', class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item summary-photo__card-general__label')
+        label_divs = soup.find_all('div',
+                                   class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item summary-photo__card-general__label')
         for div in label_divs:
             information_title = div.find('span', class_='information-item__title')
             if information_title and information_title.text.strip() == "Photo Category:":
@@ -51,6 +53,7 @@ def download_images_from_shipspotting(process_id, url_prefix='https://www.shipsp
 
     # Return the found image URLs and the labels
     return image_urls, labels
+
 
 # Function to save the downloaded images and labels to disk
 def save_images_and_labels(image_urls, labels, output_dir='downloaded_images', process_id=None):
@@ -79,13 +82,13 @@ def save_images_and_labels(image_urls, labels, output_dir='downloaded_images', p
 
                 # Save the corresponding label in a .txt file
                 label_filename = f'image_{process_id}_{index}.txt'
-                #label_path = os.path.join(output_dir, label_filename)
-                #with open(label_path, 'w') as label_file:
+                # label_path = os.path.join(output_dir, label_filename)
+                # with open(label_path, 'w') as label_file:
                 #    if labels and len(labels) > index:
                 #        label_file.write(labels[index])
                 #    else:
                 #        label_file.write("No label found")
-                #-print(f"Label saved to {label_path}")
+                # -print(f"Label saved to {label_path}")
             else:
                 print(f"No valid image URL provided for process_id {process_id}")
     except Exception as e:
@@ -93,6 +96,7 @@ def save_images_and_labels(image_urls, labels, output_dir='downloaded_images', p
         print(f"Error saving image or label for {process_id}: {e}")
 
     return saved_paths
+
 
 def main():
     # Iterate over a range of process_ids
@@ -108,6 +112,7 @@ def main():
         # Step 2: Save images and labels locally with a unique name
         saved_paths = save_images_and_labels(image_urls, labels, output_folder, process_id)
         print(f"Saved Images and Labels: {saved_paths}")
+
 
 if __name__ == '__main__':
     main()
