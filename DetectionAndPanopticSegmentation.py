@@ -108,7 +108,7 @@ def process_image(image, yolo_model, panoptic_model, detection_labels, url, phot
         mask_element.set("rle", rle_str)
         ET.SubElement(mask_element, "attribute", name="type", source="auto").text = photo_label
 
-    return image_metadata
+    return image_metadata, image_path
 
 # Scrape images from ShipSpotting and process them
 def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detection_labels):
@@ -152,9 +152,18 @@ def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detec
         return None
 
 # Save XML file with detection, segmentation, and classification data
-def save_xml(xml_data, file_name="output.xml"):
+def save_xml(xml_data, file_name="output.xml", path=""):
+    # If the path is not empty, ensure the directory exists
+    if path:
+        if not os.path.exists(path):
+            os.makedirs(path)
+        file_path = os.path.join(path, file_name)
+    else:
+        file_path = file_name  # Save to the current directory if no path is specified
+
+    # Save the XML data to the specified path and file name
     tree = ET.ElementTree(xml_data)
-    tree.write(file_name)
+    tree.write(file_path)
 
 # Main function to execute the scraping and processing
 def main():
@@ -163,10 +172,10 @@ def main():
     detection_labels = ["boat"]
 
     process_id = 1334001  # Example ShipSpotting image ID
-    xml_data = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detection_labels)
+    xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detection_labels)
 
     if xml_data:
-        save_xml(xml_data, f"ship_annotation_{process_id}.xml")
+        save_xml(xml_data, f"ship_annotation_{process_id}.xml", "processed_images")
 
 if __name__ == "__main__":
     main()
