@@ -1,63 +1,54 @@
-from detectron2.config import get_cfg
-from detectron2 import model_zoo
+import os
+
 from detectron2.engine import DefaultTrainer
-from detectron2.data.datasets import register_coco_panoptic_separated
-from fiftyone.utils.transformers import torch
+from detectron2.config import get_cfg
+from detectron2.data.datasets import register_coco_instances
+from detectron2 import model_zoo
 
+# Register your dataset in COCO format
+def register_datasets():
+    register_coco_instances("my_dataset_train", {}, "path/to/annotations/instances_train.json", "path/to/train/images")
+    register_coco_instances("my_dataset_val", {}, "path/to/annotations/instances_val.json", "path/to/val/images")
 
-def setup_panoptic_model():
+# Set up the configuration
+def setup_cfg():
     cfg = get_cfg()
-
-    # Load a base config file for Panoptic Segmentation
     cfg.merge_from_file(model_zoo.get_config_file("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml"))
 
-    # Load pre-trained weights
+    # Load pre-trained weights if available or use COCO weights
     cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml")
 
-    # Use GPU if available
-    cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+    # Set the number of classes in your dataset
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1  # If you have only one class, e.g., "boat"
 
-    # Dataset registration (replace with your dataset paths)
-    register_coco_panoptic_separated(
-        "my_panoptic_train",
-        {},
-        image_root="path/to/your/train/images",
-        panoptic_root="path/to/your/panoptic/annotations",
-        panoptic_json="path/to/your/panoptic/train_annotations.json",
-        instances_json="path/to/your/instances/train_annotations.json"
-    )
+    # Set the dataset paths
+    cfg.DATASETS.TRAIN = ("my_dataset_train",)
+    cfg.DATASETS.TEST = ("my_dataset_val",)
 
-    register_coco_panoptic_separated(
-        "my_panoptic_val",
-        {},
-        image_root="path/to/your/val/images",
-        panoptic_root="path/to/your/panoptic/annotations",
-        panoptic_json="path/to/your/panoptic/val_annotations.json",
-        instances_json="path/to/your/instances/val_annotations.json"
-    )
-
-    # Dataset parameters
-    cfg.DATASETS.TRAIN = ("my_panoptic_train",)
-    cfg.DATASETS.TEST = ("my_panoptic_val",)
-
-    # Number of classes
-    cfg.MODEL.SEM_SEG_HEAD.NUM_CLASSES = 80  # Adjust according to your dataset
-
-    # Batch size and learning rate
+    # Set the batch size, learning rate, and other hyperparameters
     cfg.SOLVER.IMS_PER_BATCH = 2
-    cfg.SOLVER.BASE_LR = 0.00025  # Adjust according to your needs
-    cfg.SOLVER.MAX_ITER = 300000  # Adjust number of iterations
+    cfg.SOLVER.BASE_LR = 0.00025
+    cfg.SOLVER.MAX_ITER = 10000  # Number of iterations
 
-    # Set the output directory
-    cfg.OUTPUT_DIR = "./output_panoptic"
+    # Save checkpoints during training
+    cfg.SOLVER.CHECKPOINT_PERIOD = 1000
 
-    # Create the trainer and start training
+    # Set output directory
+    cfg.OUTPUT_DIR = "/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/segmentation_Model"
+
+    return cfg
+
+# Start training
+def train_model():
+    register_datasets()
+    cfg = setup_cfg()
+
     os.makedirs(cfg.OUTPUT_DIR, exist_ok=True)
+
+    # Trainer
     trainer = DefaultTrainer(cfg)
     trainer.resume_or_load(resume=False)
-
-    # Start training
     trainer.train()
 
-# Call the function to train the model
-setup_panoptic_model()
+if __name__ == "__main__":
+    train_model()

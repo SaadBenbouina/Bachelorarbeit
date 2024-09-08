@@ -64,6 +64,6 @@ def plot_single_image(image_path, label_path):
 
 # Visualization for one specific image and its corresponding label file
 plot_single_image(
-    image_path="/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335717_0_jpg.rf.d44d2d834be0eca702ff7655d000d661.jpg",
-    label_path="/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335717_0_jpg.rf.d44d2d834be0eca702ff7655d000d661.txt"
+    image_path="/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335000_0_jpg.rf.5f4b39217f65a225f0da49da5ebe4004.jpg",
+    label_path="/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train/image_1335000_0_jpg.rf.5f4b39217f65a225f0da49da5ebe4004.txt"
 )
