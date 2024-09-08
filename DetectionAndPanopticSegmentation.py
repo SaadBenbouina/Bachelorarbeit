@@ -71,7 +71,7 @@ def save_image(image_np, path, filename):
     return image_path
 
 # Process images for detection, segmentation, and classification
-def process_image(image, yolo_model, panoptic_model, detection_labels, url, photo_label, process_id, debug=True):
+def process_image(image, yolo_model, panoptic_model, detection_labels, url, photo_label, taking_time, process_id, debug=True):
     image_np = np.array(image)
     width, height = image.size
 
@@ -100,14 +100,14 @@ def process_image(image, yolo_model, panoptic_model, detection_labels, url, phot
     image_path = save_image(image_np, "processed_images", f"{process_id}_processed.jpg")
 
     # Create XML structure
-    image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", width=str(width), height=str(height))
+    image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", date=f"{taking_time}", width=str(width), height=str(height))
     print(panoptic_result["instances"])
     for idx in range(len(panoptic_result["instances"])):
         mask = panoptic_result["panoptic_seg"][0].cpu().numpy() == idx
         mask = mask.astype(np.uint8)
         rle = mask_to_rle(mask)
 
-        mask_element = ET.SubElement(image_metadata, "mask", label="segment")
+        mask_element = ET.SubElement(image_metadata, "mask", label="segment", source="auto")
         rle_str = ', '.join(str(count) for count in rle["counts"])
         mask_element.set("rle", rle_str)
 
@@ -134,8 +134,13 @@ def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detec
         label_divs = soup.find_all('div',
                                    class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item summary-photo__card-general__label')
         label_text = ""
+        taken_time = ""
         for div in label_divs:
             information_title = div.find('span', class_='information-item__title')
+            if information_title and information_title.text.strip() == "Captured:":
+                taken_time_value = div.find('span', class_='information-item__value')
+                if taken_time_value:
+                    taken_time = taken_time_value.text.strip()
             if information_title and information_title.text.strip() == "Photo Category:":
                 label_value = div.find('span', class_='information-item__value')
                 if label_value:
@@ -158,7 +163,7 @@ def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detec
         label = ShipLabelFilter.filter_label(label_text)
         print(f"Processing ship image with label: {label[0]}")
 
-        xml_data = process_image(image, yolo_model, panoptic_model, detection_labels, image_url, label[0], process_id, debug=True)
+        xml_data = process_image(image, yolo_model, panoptic_model, detection_labels, image_url, label[0], taken_time, process_id, debug=True)
 
         return xml_data
     except Exception as e:
@@ -185,7 +190,7 @@ def main():
     panoptic_model = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id = 1334000  # Example ShipSpotting image ID
+    process_id = 1335000  # Example ShipSpotting image ID
     xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, detection_labels)
 
     if xml_data:
