@@ -44,7 +44,7 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
         label = yolo_model.names[class_id]
         confidence = box.conf[0]
         # Only draw bounding box if confidence is greater than 0.5
-        if confidence > 0.5 and label in detection_labels:
+        if confidence > 0.1 and label in detection_labels:
             detected = True
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             confidence = box.conf[0]
@@ -216,11 +216,11 @@ def save_xml(xml_data, file_name="output.xml", path=""):
 
 # Main function to execute the scraping and processing
 def main():
-    yolo_model = YOLO("boat_detection_yolo_model_new2/weights/best.pt")
+    yolo_model = YOLO("boat_detection_yolo_model_new3/weights/best.pt")
     panoptic_model, metadata = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id =1234337  # Example ShipSpotting image ID
+    process_id =1335000  # Example ShipSpotting image ID
     xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata, detection_labels)
 
     if xml_data:

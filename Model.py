@@ -5,7 +5,7 @@ model = YOLO("boat_detection_yolo_model_new2/weights/best.pt")  # build a new mo
 # Use the model
 
 results =model.train(
-data="config.yaml",epochs=10,
+data="config.yaml",epochs=20,
 imgsz=640,
 name="boat_detection_yolo_model_new3",
 project="/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit",
