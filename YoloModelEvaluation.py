@@ -1,7 +1,6 @@
 import os
 import shutil
 from ultralytics import YOLO
-import numpy as np
 
 # Funktion zur Berechnung des IoU-Werts
 def calculate_iou(box1, box2):
@@ -27,10 +26,10 @@ def yolo_to_xyxy(img_width, img_height, box):
     return [x1, y1, x2, y2]
 
 # Lade das trainierte Modell
-model = YOLO("yolov8n.pt")  # ersetze durch den tatsächlichen Pfad zu deinem Modell
+model = YOLO("boat_detection_yolo_model_new2/weights/best.pt")  # ersetze durch den tatsächlichen Pfad zu deinem Modell
 
 # Definiere den Pfad zu deinem Datensatz und den Zielordner für Bilder mit niedrigem IoU
-data_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TestDataYolo"
+data_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train"
 low_iou_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/0.7"
 
 # Erstelle den Ordner, falls er noch nicht existiert
@@ -70,6 +69,6 @@ for result in results:
                 # Move the corresponding image and its label file to the target folder
                 shutil.move(result.path, os.path.join(low_iou_folder, image_name))
                 shutil.move(annotation_file, os.path.join(low_iou_folder, os.path.basename(annotation_file)))
-                print(f"Bild {image_name} und sein Label wurden verschoben, da der IoU unter 0.8 liegt.")
+                print(f"Bild {image_name} und sein Label wurden verschoben, da der IoU unter 0.7 liegt.")
                 break  # Move the image and label if any box does not match welly
 print("Evaluierung abgeschlossen.")
