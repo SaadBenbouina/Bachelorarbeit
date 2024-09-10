@@ -66,7 +66,7 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
 
     # Define the classes we're interested in by name
     target_classes = {"sea", "boat", "sky"}
-
+    labels = []
     # Iterate through the classes and masks
     for idx, category_id in enumerate(pred_classes):
         score = pred_scores[idx]  # Get the confidence score for the current instance
@@ -76,13 +76,14 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
             label = metadata.thing_classes[category_id]
         else:
             label = None
-
+        labels.append(label)
         # Only process the instance if the score is greater than the confidence threshold
         if label in target_classes and score > confidence_threshold:
             mask = pred_masks[idx]
             color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
             frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5  # Blend the mask with color
             print(f"Applied segmentation for {label} with confidence {score:.2f}")
+    print("labels", labels)
 
 
 # Convert mask to RLE format for XML storage
@@ -220,7 +221,7 @@ def main():
     panoptic_model, metadata = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id =1335000  # Example ShipSpotting image ID
+    process_id =1335020  # Example ShipSpotting image ID
     xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata, detection_labels)
 
     if xml_data:
