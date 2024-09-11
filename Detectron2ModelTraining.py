@@ -11,8 +11,8 @@ d2_logger.setup_logger()
 # Register your dataset in COCO format
 def register_datasets():
     print("Registering datasets...")
-    register_coco_instances("my_dataset_train", {}, '/Users/saadbenboujina/Downloads/semantic segmentation-2/new/output_annotations.coco.json', "/Users/saadbenboujina/Downloads/semantic segmentation-2/train")
-    register_coco_instances("my_dataset_val", {}, '/Users/saadbenboujina/Downloads/semantic segmentation-2/new/output_annotations.coco.json', "/Users/saadbenboujina/Downloads/semantic segmentation-2/train")
+    register_coco_instances("my_dataset_train", {}, 'combined_panoptic_annotations_fixed.json', "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataSegmentation/notdone")
+    register_coco_instances("my_dataset_val", {}, 'combined_panoptic_annotations_fixed.json', "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataSegmentation/notdone")
     print("Datasets registered.")
 
 # Set up the configuration
@@ -25,7 +25,7 @@ def setup_cfg():
     cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url("COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml")
 
     # Set the number of classes
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 1
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 4
 
     # Set the dataset paths
     cfg.DATASETS.TRAIN = ("my_dataset_train",)

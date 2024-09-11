@@ -26,70 +26,71 @@ def setup_panoptic_model():
 
     # Load the metadata for COCO Panoptic Segmentation
     metadata = MetadataCatalog.get("coco_2017_val_panoptic_separated")
-    print("metadata", metadata)
+
     if not metadata:
         print("Warning: Metadata not found for COCO Panoptic Segmentation.")
 
     return predictor, metadata
 
 
-
-# Perform YOLO object detection
+# Perform YOLO object detection and ensure number of bounding boxes matches segmentations
 def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
-    detected = False
+    detected_boxes = 0
     detections = yolo_result[0]
 
+    # Filter detections for the specified labels
     for i, box in enumerate(detections.boxes):
         class_id = int(box.cls[0])
         label = yolo_model.names[class_id]
         confidence = box.conf[0]
-        # Only draw bounding box if confidence is greater than 0.5
-        if confidence > 0.1 and label in detection_labels:
-            detected = True
+        # Only consider bounding boxes with confidence > 0.5 for the relevant labels
+        if confidence > 0.5 and label in detection_labels:
+            detected_boxes += 1
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             confidence = box.conf[0]
             label_text = f'{label} {confidence:.2f}'
-
-            # Draw bounding box
+            # Draw the bounding box and label
             cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
             # Put label and confidence
             cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            print(f"Selected {label} with confidence {confidence:.2f} at coordinates: ({x1}, {y1}), ({x2}, {y2})")
 
-            print(f"Detected {label} with confidence {confidence:.2f} at coordinates: ({x1}, {y1}), ({x2}, {y2})")
-    return detected
+    return detected_boxes
 
-def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_threshold=0.7):
+
+# Apply segmentation for the same number of boats as detected by YOLO
+def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_threshold=0.7, max_instances=0):
     instances = panoptic_result["instances"]
     pred_classes = instances.pred_classes.cpu().numpy()  # Get the predicted class indices
     pred_masks = instances.pred_masks.cpu().numpy()  # Get the predicted masks
     pred_scores = instances.scores.cpu().numpy()  # Get the predicted confidence scores
 
-    # Define the classes we're interested in by name
-    target_classes = {"sea", "boat", "sky"}
-    labels = []
-    # Iterate through the classes and masks
+    # Filter segmentations by score and apply only up to max_instances (from YOLO)
+    valid_segmentations = []
     for idx, category_id in enumerate(pred_classes):
-        score = pred_scores[idx]  # Get the confidence score for the current instance
-
-        # Safely retrieve the class name using metadata
-        if category_id < len(metadata.thing_classes):
+        score = pred_scores[idx]
+        if score > confidence_threshold and category_id < len(metadata.thing_classes):
             label = metadata.thing_classes[category_id]
-        else:
-            label = None
-        labels.append(label)
-        # Only process the instance if the score is greater than the confidence threshold
-        if label in target_classes and score > confidence_threshold:
-            mask = pred_masks[idx]
-            color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
-            frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5  # Blend the mask with color
-            print(f"Applied segmentation for {label} with confidence {score:.2f}")
-    print("labels", labels)
+            if label == "boat":
+                print("is boat")
+                valid_segmentations.append((score, label, pred_masks[idx]))
+
+    # Sort the segmentations by confidence
+    valid_segmentations.sort(reverse=True, key=lambda x: x[0])
+
+    # Only process the top N instances based on max_instances
+    for i in range(min(len(valid_segmentations), max_instances)):
+        score, label, mask = valid_segmentations[i]
+        color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
+        frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5  # Blend the mask with color
+        print(f"Applied segmentation for {label} with confidence {score:.2f}")
 
 
 # Convert mask to RLE format for XML storage
 def mask_to_rle(mask):
     rle = mask_util.encode(np.asfortranarray(mask.astype(np.uint8)))
     return rle
+
 
 # Save processed image
 def save_image(image_np, path, filename):
@@ -99,8 +100,10 @@ def save_image(image_np, path, filename):
     cv2.imwrite(image_path, image_np)  # Save the image
     return image_path
 
+
 # Process images for detection, segmentation, and classification
-def process_image(image, yolo_model, panoptic_model, metadata, detection_labels, url, photo_label, taking_time, process_id, debug=True):
+def process_image(image, yolo_model, panoptic_model, metadata, detection_labels, url, photo_label, taking_time,
+                  process_id, debug=True):
     image_np = np.array(image)
     width, height = image.size
 
@@ -117,8 +120,8 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
         return None, None
 
     # Draw YOLO detections and apply panoptic segmentation
-    draw_yolo_detections(image_np, yolo_result, yolo_model, detection_labels)
-    apply_panoptic_segmentation(image_np, panoptic_result, metadata)
+    detected_boxes = draw_yolo_detections(image_np, yolo_result, yolo_model, detection_labels)
+    apply_panoptic_segmentation(image_np, panoptic_result, metadata,max_instances=detected_boxes)
 
     # Display the image in a window using OpenCV
     cv2.imshow(f"Processed Image: {photo_label}", image_np)
@@ -129,7 +132,8 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
     image_path = save_image(image_np, "processed_images", f"{process_id}_processed.jpg")
 
     # Create XML structure
-    image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", date=f"{taking_time}", width=str(width), height=str(height))
+    image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", date=f"{taking_time}",
+                                width=str(width), height=str(height))
     instances = panoptic_result["instances"]
     pred_classes = instances.pred_classes.cpu().numpy()
     pred_masks = instances.pred_masks.cpu().numpy()
@@ -143,6 +147,7 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
         mask_element.set("rle", rle_str)
 
     return image_metadata, image_path
+
 
 # Scrape images from ShipSpotting and process them
 def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata, detection_labels):
@@ -194,12 +199,14 @@ def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metad
         label = ShipLabelFilter.filter_label(label_text)
         print(f"Processing ship image with label: {label[0]}")
 
-        xml_data, image_path = process_image(image, yolo_model, panoptic_model, metadata, detection_labels, image_url, label[0], taken_time, process_id, debug=True)
+        xml_data, image_path = process_image(image, yolo_model, panoptic_model, metadata, detection_labels, image_url,
+                                             label[0], taken_time, process_id, debug=True)
 
         return xml_data, image_path
     except Exception as e:
         print(f"Error processing image: {e}")
         return None, None
+
 
 # Save XML file with detection, segmentation, and classification data
 def save_xml(xml_data, file_name="output.xml", path=""):
@@ -215,17 +222,20 @@ def save_xml(xml_data, file_name="output.xml", path=""):
     tree = ET.ElementTree(xml_data)
     tree.write(file_path)
 
+
 # Main function to execute the scraping and processing
 def main():
     yolo_model = YOLO("boat_detection_yolo_model_new3/weights/best.pt")
     panoptic_model, metadata = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id =1335020  # Example ShipSpotting image ID
-    xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata, detection_labels)
+    process_id = 1335020  # random.randint(5000, 2000000)  # Example ShipSpotting image ID
+    xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata,
+                                                          detection_labels)
 
     if xml_data:
         save_xml(xml_data, f"{process_id}_processed.xml", "processed_images")
+
 
 if __name__ == "__main__":
     main()
