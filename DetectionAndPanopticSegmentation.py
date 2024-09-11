@@ -34,8 +34,9 @@ def setup_panoptic_model():
 def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
     detected_boxes = 0
     detections = yolo_result[0]
+    boxes_data = []
 
-    # Filter detections for the specified labels
+# Filter detections for the specified labels
     for i, box in enumerate(detections.boxes):
         class_id = int(box.cls[0])
         label = yolo_model.names[class_id]
@@ -51,8 +52,13 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
             # Put label and confidence
             cv2.putText(frame, label_text, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
             print(f"Selected {label} with confidence {confidence:.2f} at coordinates: ({x1}, {y1}), ({x2}, {y2})")
+            boxes_data.append({
+                'label': label,
+                'confidence': confidence,
+                'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2
+            })
 
-    return detected_boxes
+    return detected_boxes, boxes_data
 
 
 # Apply segmentation for the same number of boats as detected by YOLO
@@ -116,23 +122,28 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
     panoptic_result = panoptic_model(image_np)
 
     # Draw YOLO detections and apply panoptic segmentation
-    detected_boxes = draw_yolo_detections(image_np, yolo_result, yolo_model, detection_labels)
+    detected_boxes, boxes_data = draw_yolo_detections(image_np, yolo_result, yolo_model, detection_labels)
 
     # Get the drawn masks from panoptic segmentation
     drawn_masks = apply_panoptic_segmentation(image_np, panoptic_result, metadata,
                                               confidence_threshold=confidence_threshold,
                                               max_instances=detected_boxes)
 
-    # Display the image in a window using OpenCV
-    cv2.imshow(f"Processed Image: {photo_label}", image_np)
-    cv2.waitKey(0)  # Wait for a key press to close the window
-    cv2.destroyAllWindows()  # Close the window
     # Save the processed image
     image_path = save_image(image_np, "processed_images", f"{process_id}_processed.jpg")
 
     # Create XML structure for storing image metadata
     image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", date=f"{taking_time}",
                                 width=str(width), height=str(height))
+
+    # Store the bounding boxes in the XML
+    for box in boxes_data:
+        box_element = ET.SubElement(image_metadata, "box", label=box['label'], confidence=f"{box['confidence']:.2f}")
+        box_element.set("x1", str(box['x1']))
+        box_element.set("y1", str(box['y1']))
+        box_element.set("x2", str(box['x2']))
+        box_element.set("y2", str(box['y2']))
+        print(f"Added bounding box for {box['label']} with confidence {box['confidence']:.2f}")
 
     # Store the drawn masks in the XML
     for score, label, mask in drawn_masks:
@@ -141,6 +152,11 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
         rle_str = ', '.join(str(count) for count in rle["counts"])
         mask_element.set("rle", rle_str)
         print(f"Added mask for {label} with confidence {score:.2f}")
+
+    # Display the image in a window using OpenCV
+    cv2.imshow(f"Processed Image: {photo_label}", image_np)
+    cv2.waitKey(0)  # Wait for a key press to close the window
+    cv2.destroyAllWindows()  # Close the window
 
     return image_metadata, image_path
 
@@ -224,7 +240,7 @@ def main():
     panoptic_model, metadata = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id = 1335021  # random.randint(5000, 2000000)  # Example ShipSpotting image ID
+    process_id = 1335020  # random.randint(5000, 2000000)  # Example ShipSpotting image ID
     xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata,
                                                           detection_labels)
 
