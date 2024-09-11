@@ -130,7 +130,7 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
                                               max_instances=detected_boxes)
 
     # Save the processed image
-    image_path = save_image(image_np, "processed_images", f"{process_id}_processed.jpg")
+    image_path = save_image(image_np, "../processed_images", f"{process_id}_processed.jpg")
 
     # Create XML structure for storing image metadata
     image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", date=f"{taking_time}",
@@ -236,7 +236,7 @@ def save_xml(xml_data, file_name="output.xml", path=""):
 
 # Main function to execute the scraping and processing
 def main():
-    yolo_model = YOLO("boat_detection_yolo_model_new3/weights/best.pt")
+    yolo_model = YOLO("../YoloModel/boat_detection_yolo_model_new3/weights/best.pt")
     panoptic_model, metadata = setup_panoptic_model()
     detection_labels = ["boat"]
 
@@ -245,7 +245,7 @@ def main():
                                                           detection_labels)
 
     if xml_data:
-        save_xml(xml_data, f"{process_id}_processed.xml", "processed_images")
+        save_xml(xml_data, f"{process_id}_processed.xml", "../processed_images")
 
 
 if __name__ == "__main__":

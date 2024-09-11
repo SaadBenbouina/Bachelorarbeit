@@ -26,7 +26,7 @@ def yolo_to_xyxy(img_width, img_height, box):
     return [x1, y1, x2, y2]
 
 # Lade das trainierte Modell
-model = YOLO("boat_detection_yolo_model_new2/weights/best.pt")  # ersetze durch den tatsächlichen Pfad zu deinem Modell
+model = YOLO("YoloModel/boat_detection_yolo_model_new2/weights/best.pt")  # ersetze durch den tatsächlichen Pfad zu deinem Modell
 
 # Definiere den Pfad zu deinem Datensatz und den Zielordner für Bilder mit niedrigem IoU
 data_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train"

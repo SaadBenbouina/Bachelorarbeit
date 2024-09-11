@@ -1,7 +1,7 @@
 from ultralytics import YOLO
 
 # Load a model
-model = YOLO("boat_detection_yolo_model_new2/weights/best.pt")  # build a new model from scratch
+model = YOLO("../YoloModel/boat_detection_yolo_model_new2/weights/best.pt")  # build a new model from scratch
 # Use the model
 
 results =model.train(
