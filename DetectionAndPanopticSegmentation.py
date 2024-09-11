@@ -27,9 +27,6 @@ def setup_panoptic_model():
     # Load the metadata for COCO Panoptic Segmentation
     metadata = MetadataCatalog.get("coco_2017_val_panoptic_separated")
 
-    if not metadata:
-        print("Warning: Metadata not found for COCO Panoptic Segmentation.")
-
     return predictor, metadata
 
 
@@ -72,18 +69,22 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
         if score > confidence_threshold and category_id < len(metadata.thing_classes):
             label = metadata.thing_classes[category_id]
             if label == "boat":
-                print("is boat")
                 valid_segmentations.append((score, label, pred_masks[idx]))
 
     # Sort the segmentations by confidence
     valid_segmentations.sort(reverse=True, key=lambda x: x[0])
+
+    drawn_masks = []  # Store the masks that are drawn
 
     # Only process the top N instances based on max_instances
     for i in range(min(len(valid_segmentations), max_instances)):
         score, label, mask = valid_segmentations[i]
         color = np.random.randint(0, 255, (1, 3), dtype=np.uint8).tolist()[0]
         frame[mask] = frame[mask] * 0.5 + np.array(color) * 0.5  # Blend the mask with color
+        drawn_masks.append((score, label, mask))  # Save the drawn masks and associated info
         print(f"Applied segmentation for {label} with confidence {score:.2f}")
+
+    return drawn_masks  # Return the drawn masks
 
 
 # Convert mask to RLE format for XML storage
@@ -103,7 +104,7 @@ def save_image(image_np, path, filename):
 
 # Process images for detection, segmentation, and classification
 def process_image(image, yolo_model, panoptic_model, metadata, detection_labels, url, photo_label, taking_time,
-                  process_id, debug=True):
+                  process_id, confidence_threshold=0.7, debug=True):
     image_np = np.array(image)
     width, height = image.size
 
@@ -114,40 +115,34 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
     yolo_result = yolo_model.predict(image_np)
     panoptic_result = panoptic_model(image_np)
 
-    # Check if panoptic_result contains the required keys
-    if "panoptic_seg" not in panoptic_result or "instances" not in panoptic_result:
-        print(f"Panoptic segmentation did not return the expected result: {panoptic_result.keys()}")
-        return None, None
-
     # Draw YOLO detections and apply panoptic segmentation
     detected_boxes = draw_yolo_detections(image_np, yolo_result, yolo_model, detection_labels)
-    apply_panoptic_segmentation(image_np, panoptic_result, metadata,max_instances=detected_boxes)
+
+    # Get the drawn masks from panoptic segmentation
+    drawn_masks = apply_panoptic_segmentation(image_np, panoptic_result, metadata,
+                                              confidence_threshold=confidence_threshold,
+                                              max_instances=detected_boxes)
 
     # Display the image in a window using OpenCV
     cv2.imshow(f"Processed Image: {photo_label}", image_np)
     cv2.waitKey(0)  # Wait for a key press to close the window
     cv2.destroyAllWindows()  # Close the window
-
     # Save the processed image
     image_path = save_image(image_np, "processed_images", f"{process_id}_processed.jpg")
 
-    # Create XML structure
+    # Create XML structure for storing image metadata
     image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", date=f"{taking_time}",
                                 width=str(width), height=str(height))
-    instances = panoptic_result["instances"]
-    pred_classes = instances.pred_classes.cpu().numpy()
-    pred_masks = instances.pred_masks.cpu().numpy()
 
-    for idx, category_id in enumerate(pred_classes):
-        mask = pred_masks[idx]
-        rle = mask_to_rle(mask)
-
-        mask_element = ET.SubElement(image_metadata, "mask", label="segment", source="auto")
+    # Store the drawn masks in the XML
+    for score, label, mask in drawn_masks:
+        rle = mask_to_rle(mask)  # Convert the mask to RLE format
+        mask_element = ET.SubElement(image_metadata, "mask", label=label, source="auto")
         rle_str = ', '.join(str(count) for count in rle["counts"])
         mask_element.set("rle", rle_str)
+        print(f"Added mask for {label} with confidence {score:.2f}")
 
     return image_metadata, image_path
-
 
 # Scrape images from ShipSpotting and process them
 def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata, detection_labels):
@@ -229,7 +224,7 @@ def main():
     panoptic_model, metadata = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id = 1335020  # random.randint(5000, 2000000)  # Example ShipSpotting image ID
+    process_id = 1335021  # random.randint(5000, 2000000)  # Example ShipSpotting image ID
     xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata,
                                                           detection_labels)
 
