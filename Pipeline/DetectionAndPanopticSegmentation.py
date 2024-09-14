@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 import io
 from PIL import Image
 import xml.etree.ElementTree as ET
-from ShipLabelFilter import ShipLabelFilter
+from Pipeline.ShipLabelFilter import ShipLabelFilter
 import os
 import pycocotools.mask as mask_util
 from detectron2.data import MetadataCatalog
