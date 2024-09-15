@@ -1,7 +1,7 @@
 # Paths to the data
 path: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo
-train: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/0.7
-val: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/0.7
+train: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
+val: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
 test: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
 
 

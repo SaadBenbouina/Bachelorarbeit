@@ -5,12 +5,12 @@ model = YOLO("../YoloModel/boat_detection_yolo_model_new2/weights/best.pt")  # b
 # Use the model
 
 results =model.train(
-data="config.yaml",epochs=20,
+data="config.yaml",epochs=40,
 imgsz=640,
 name="boat_detection_yolo_model_new3",
 project="/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit",
 cache=True,
-save_period=1,  # Saves the model after each epoch
+save_period=4,  # Saves the model after 3 epoch
 val=True
 )
 """
