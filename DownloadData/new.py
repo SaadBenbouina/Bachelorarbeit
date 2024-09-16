@@ -1,5 +1,4 @@
 import random
-from typing import List
 
 import cv2
 import numpy as np
@@ -63,65 +62,37 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
 
     return detected_boxes, boxes_data
 
-# Generiere eine eindeutige Farbe für jedes Objekt (Boot, Himmel, Meer)
+# Generiere eine eindeutige Farbe für jedes Objekt
 def generate_unique_color():
     return np.array([random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)], dtype=np.uint8)
 
-# Berechne die Fläche der Bounding Box
-def calculate_bbox_area(x1, y1, x2, y2):
-    print("Boundinbox area:" , abs((x2 - x1) * (y1 - y2)))
-    return abs((x2 - x1) * (y1 - y2))
+# Berechne die Fläche (Anzahl der True-Pixel) einer Maske innerhalb einer Bounding-Box
+def mask_area_within_bbox(mask, bbox):
+    x1, y1, x2, y2 = bbox
+    cropped_mask = mask[y1:y2, x1:x2]  # Maske innerhalb der Bounding-Box zuschneiden
+    return np.sum(cropped_mask)  # Anzahl der True-Pixel (Fläche)
 
-# Berechne die Fläche der Maske
-def calculate_mask_area(mask):
-    return np.sum(mask)
+# Wähle die Maske mit der größten Fläche und höchsten Konfidenz innerhalb der Bounding-Box
+def select_largest_confident_mask_within_bbox(pred_masks, pred_scores, yolo_bbox):
+    max_area = 0
+    best_mask = None
+    best_score = 0
 
-# Berechne die Überlappung zwischen der Maske und der Bounding Box
-def get_mask_in_bbox(mask, x1, y1, x2, y2):
-    mask_in_bbox = np.zeros_like(mask)
-    mask_in_bbox[y1:y2, x1:x2] = mask[y1:y2, x1:x2]
-    return mask_in_bbox
-def calculate_iou(mask, x1, y1, x2, y2):
-    mask_area = calculate_mask_area(mask)
-    bbox_area = calculate_bbox_area(x1, y1, x2, y2)
+    for mask, score in zip(pred_masks, pred_scores):
+        area = mask_area_within_bbox(mask, yolo_bbox)
+        if area > max_area:  # Wähle die Maske mit der größten Fläche
+            max_area = area
+            best_mask = mask
+            best_score = score
+            if(score== 0.83):
+                print("maxare1", area)
+    print("area",max_area)
 
-    # Calculate the intersection area
-    mask_in_bbox = get_mask_in_bbox(mask, x1, y1, x2, y2)
-    intersection_area = calculate_mask_area(mask_in_bbox)
-
-    # IoU is intersection over union
-    iou = intersection_area / float(bbox_area + mask_area - intersection_area)
-    return iou
-
-def select_best_mask_within_bbox(max_instances, boat_scores, boat_boxes, panoptic_masks):
-    selected_masks = []
-    for i, box in enumerate(boat_boxes):
-        x1, y1, x2, y2 = box['x1'], box['y1'], box['x2'], box['y2']
-        best_mask = None
-        best_score = -1
-        best_iou = 0
-
-        # Find the mask with the highest IoU within the bounding box
-        for mask, score in zip(panoptic_masks, boat_scores):
-            iou = calculate_iou(mask, x1, y1, x2, y2)
-
-            # Select the mask based on IoU and score
-            if iou > best_iou and score > best_score:
-                best_mask = mask
-                best_score = score
-                best_iou = iou
-
-        if best_mask is not None:
-            selected_masks.append((best_score, "boat", best_mask))
-
-    return selected_masks
-
+    return best_mask, best_score
 
 # Apply segmentation for the same number of boats as detected by YOLO
-def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_threshold=0.7, max_instances=0,
-                                boxes_data=None):
-    if boxes_data is None:
-        boxes_data = []
+def apply_panoptic_segmentation(frame, panoptic_result, yolo_boxes, metadata, confidence_threshold=0.7):
+    # Extrahieren und Konvertieren der Panoptic Segmentierungsdaten
     panoptic_seg, segments_info = panoptic_result["panoptic_seg"]  # Tuple aus Segmentierungsdaten und Segmentinfo
     panoptic_seg = panoptic_seg.cpu().numpy()
 
@@ -131,37 +102,31 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
     pred_masks = instances.pred_masks.cpu().numpy()
     pred_scores = instances.scores.cpu().numpy()
 
-    # Filtern der validen "boat" Segmentierungen
-    boat_mask_indices = np.where(
-        (pred_scores > confidence_threshold) &
-        (pred_classes < len(metadata.thing_classes)) &
-        (np.array([metadata.thing_classes[cls] for cls in pred_classes]) == "boat")
-    )[0]
+    drawn_masks = []
 
+    # Schleife über YOLO-Bounding-Boxen
+    for yolo_box in yolo_boxes:
+        # Finde alle Panoptic-Masken für "boat" (die gleiche Klasse wie YOLO verwendet)
+        boat_mask_indices = np.where(
+            (pred_scores > confidence_threshold) &
+            (pred_classes < len(metadata.thing_classes)) &
+            (np.array([metadata.thing_classes[cls] for cls in pred_classes]) == "boat")
+        )[0]
 
-    # Filtern der Masken und Bounding Boxes
-    boat_scores = pred_scores[boat_mask_indices]
+        # Begrenze die Anzahl der Instanzen für boats
+        boat_masks = pred_masks[boat_mask_indices]
+        boat_scores = pred_scores[boat_mask_indices]
 
-    # Wähle die besten Masken, die in den Bounding Boxes liegen
-    # Ensure that YOLO bounding boxes exist
-    if not boxes_data or len(boxes_data) == 0:
-        print("No bounding boxes found from YOLO detection.")
-        return []
+        # Wähle die größte Maske innerhalb der YOLO-Bounding-Box
+        selected_mask, selected_score = select_largest_confident_mask_within_bbox(boat_masks, boat_scores, yolo_box)
 
-    # If both are valid, proceed
-    drawn_masks = select_best_mask_within_bbox(max_instances, boat_scores, boxes_data, pred_masks)
+        if selected_mask is not None:
+            color = generate_unique_color()  # Einzigartige Farbe für jedes Boot generieren
+            print(f"Farbe für boat: {color}, Fläche: {np.sum(selected_mask)}")
 
-
-    # Begrenzen der Anzahl der Instanzen basierend auf max_instances
-    if max_instances> 0:
-        boat_mask_indices = drawn_masks[:max_instances]
-
-    # Zeichne die besten Masken auf das Bild
-    for score, label, mask in boat_mask_indices:
-        color = generate_unique_color()  # Einzigartige Farbe für jedes Boot generieren
-        print(f"Farbe für {label}: {color}")  # Überprüfen der generierten Farbe
-        # Blending der Farbe mit dem Originalbild
-        frame[mask] = (frame[mask] * 0.5 + color * 0.5).astype(np.uint8)
+            # Blending der Farbe mit dem Originalbild
+            frame[selected_mask] = (frame[selected_mask] * 0.5 + color * 0.5).astype(np.uint8)
+            drawn_masks.append((selected_score, "boat", selected_mask))
 
     # Verarbeitung der "stuff" Klassen (sky, sea)
     stuff_labels = ["sky", "sea"]
@@ -182,7 +147,6 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
         drawn_masks.append((1.0, label, mask))  # Verwenden eines Standardwertes für die Konfidenz
 
     return drawn_masks
-
 
 # Convert mask to RLE format for XML storage
 def mask_to_rle(mask):
@@ -210,15 +174,19 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
 
     # Perform YOLO detection
     yolo_result = yolo_model.predict(image_np)
-    panoptic_result = panoptic_model(image_np)
-
-    # Draw YOLO detections and apply panoptic segmentation
     detected_boxes, boxes_data = draw_yolo_detections(image_np, yolo_result, yolo_model, detection_labels)
 
+    # YOLO-Bounding-Boxen (x1, y1, x2, y2) an apply_panoptic_segmentation übergeben
+    yolo_boxes = [(box['x1'], box['y1'], box['x2'], box['y2']) for box in boxes_data]
+
+    # Perform Panoptic Segmentation
+    panoptic_result = panoptic_model(image_np)
+
     # Get the drawn masks from panoptic segmentation
-    drawn_masks = apply_panoptic_segmentation(image_np, panoptic_result, metadata,
-                                              confidence_threshold=confidence_threshold,
-                                              max_instances=detected_boxes,boxes_data=boxes_data)
+    drawn_masks = apply_panoptic_segmentation(image_np, panoptic_result, yolo_boxes, metadata,
+                                              confidence_threshold=confidence_threshold)
+
+    # Speichern und Ausgeben bleiben unverändert
 
     # Save the processed image
     image_path = save_image(image_np, "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Pipeline/output", f"{process_id}_processed.jpg")
