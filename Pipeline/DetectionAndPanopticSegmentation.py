@@ -1,3 +1,4 @@
+import random
 
 import cv2
 import numpy as np
@@ -61,14 +62,12 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
 
     return detected_boxes, boxes_data
 
+# Generiere eine eindeutige Farbe für jedes Objekt (Boot, Himmel, Meer)
+def generate_unique_color():
+    return np.array([random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)], dtype=np.uint8)
 
 # Apply segmentation for the same number of boats as detected by YOLO
 def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_threshold=0.7, max_instances=0):
-    class_colors = {
-        "boat": np.array([255, 0, 0], dtype=np.uint8),
-        "sky": np.array([0, 255, 0], dtype=np.uint8),
-        "sea": np.array([255, 255, 255], dtype=np.uint8)
-    }
 
     # Extrahieren und Konvertieren der Panoptic Segmentierungsdaten
     panoptic_seg, segments_info = panoptic_result["panoptic_seg"]  # Tuple aus Segmentierungsdaten und Segmentinfo
@@ -91,20 +90,18 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
     if max_instances > 0:
         boat_mask_indices = boat_mask_indices[:max_instances]
 
-    # Anwenden der Masken auf das Frame
+    # Anwenden der Masken auf das Frame, jede Boot-Instanz erhält eine eigene Farbe
+    drawn_masks = []
     for idx in boat_mask_indices:
         label = "boat"
         mask = pred_masks[idx]
-        color = class_colors[label]
+        color = generate_unique_color()  # Einzigartige Farbe für jedes Boot generieren
+        print(f"Farbe für {label}: {color}")  # Überprüfen der generierten Farbe
         # Blending der Farbe mit dem Originalbild
         frame[mask] = (frame[mask] * 0.5 + color * 0.5).astype(np.uint8)
-
-    drawn_masks = [
-        (pred_scores[idx], "boat", pred_masks[idx]) for idx in boat_mask_indices
-    ]
+        drawn_masks.append((pred_scores[idx], "boat", pred_masks[idx]))
 
     # Verarbeitung der "stuff" Klassen (sky, sea)
-    # Extrahieren der IDs der relevanten "stuff" Klassen
     stuff_labels = ["sky", "sea"]
     stuff_category_ids = [metadata.stuff_classes.index(label) for label in stuff_labels if label in metadata.stuff_classes]
 
@@ -117,7 +114,8 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
     for seg in stuff_segments:
         label = metadata.stuff_classes[seg["category_id"]]
         mask = panoptic_seg == seg["id"]
-        color = class_colors[label]
+        color = generate_unique_color()  # Einzigartige Farbe für jede "stuff" Klasse generieren
+        print(f"Farbe für {label}: {color}")  # Überprüfen der generierten Farbe
         frame[mask] = (frame[mask] * 0.5 + color * 0.5).astype(np.uint8)
         drawn_masks.append((1.0, label, mask))  # Verwenden eines Standardwertes für die Konfidenz
 
