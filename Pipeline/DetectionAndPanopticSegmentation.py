@@ -1,5 +1,4 @@
 import random
-
 import cv2
 import numpy as np
 import requests
@@ -66,10 +65,54 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
 def generate_unique_color():
     return np.array([random.randint(0, 255), random.randint(0, 255), random.randint(0, 255)], dtype=np.uint8)
 
-# Apply segmentation for the same number of boats as detected by YOLO
-def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_threshold=0.7, max_instances=0):
+def calculate_iou(mask, x1, y1, x2, y2):
+    # Ensure coordinates are within mask dimensions
+    height, width = mask.shape
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(width, x2), min(height, y2)
 
-    # Extrahieren und Konvertieren der Panoptic Segmentierungsdaten
+    bbox_mask = np.zeros_like(mask, dtype=bool)
+    bbox_mask[y1:y2, x1:x2] = True
+
+    intersection = np.logical_and(mask, bbox_mask)
+    union = np.logical_or(mask, bbox_mask)
+
+    intersection_area = np.sum(intersection)
+    union_area = np.sum(union)
+
+    iou = intersection_area / union_area if union_area != 0 else 0
+    return iou
+
+
+def select_best_mask_within_bbox(boat_scores, boat_boxes, panoptic_masks):
+    selected_masks = []
+    for i, box in enumerate(boat_boxes):
+        x1, y1, x2, y2 = box['x1'], box['y1'], box['x2'], box['y2']
+        best_mask = None
+        best_score = -1
+        best_iou = 0
+
+        # Find the mask with the highest IoU within the bounding box
+        for mask, score in zip(panoptic_masks, boat_scores):
+            iou = calculate_iou(mask, x1, y1, x2, y2)
+
+            # Select the mask based on IoU and score
+            if iou > best_iou:
+                best_mask = mask
+                best_score = score
+                best_iou = iou
+
+        if best_mask is not None:
+            selected_masks.append((best_score, "boat", best_mask))
+
+    return selected_masks
+
+
+# Apply segmentation for the same number of boats as detected by YOLO
+def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_threshold=0.7, max_instances=0,
+                                boxes_data=None):
+    if boxes_data is None:
+        boxes_data = []
     panoptic_seg, segments_info = panoptic_result["panoptic_seg"]  # Tuple aus Segmentierungsdaten und Segmentinfo
     panoptic_seg = panoptic_seg.cpu().numpy()
 
@@ -79,33 +122,35 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
     pred_masks = instances.pred_masks.cpu().numpy()
     pred_scores = instances.scores.cpu().numpy()
 
-    # Filtern der validen "boat" Segmentierungen
+    # Filter valid "boat" segmentations
+    boat_class_id = metadata.thing_classes.index("boat")
     boat_mask_indices = np.where(
         (pred_scores > confidence_threshold) &
-        (pred_classes < len(metadata.thing_classes)) &
-        (np.array([metadata.thing_classes[cls] for cls in pred_classes]) == "boat")
+        (pred_classes == boat_class_id)
     )[0]
 
-    # Begrenzen der Anzahl der Instanzen basierend auf max_instances
+    # Extract boat masks and scores
+    boat_scores = pred_scores[boat_mask_indices]
+    boat_masks = pred_masks[boat_mask_indices]
+
+    # Select the best masks within the bounding boxes
+    drawn_masks = select_best_mask_within_bbox(boat_scores, boxes_data, boat_masks)
+
+    # Limit the number of instances based on max_instances
     if max_instances > 0:
-        boat_mask_indices = boat_mask_indices[:max_instances]
+        drawn_masks = drawn_masks[:max_instances]
 
-    # Anwenden der Masken auf das Frame, jede Boot-Instanz erhält eine eigene Farbe
-    drawn_masks = []
-    for idx in boat_mask_indices:
-        label = "boat"
-        mask = pred_masks[idx]
-        color = generate_unique_color()  # Einzigartige Farbe für jedes Boot generieren
-        print(f"Farbe für {label}: {color}")  # Überprüfen der generierten Farbe
-        # Blending der Farbe mit dem Originalbild
+    # Draw the best masks on the image
+    for score, label, mask in drawn_masks:
+        color = generate_unique_color()
+        print(f"Farbe für {label}: {color}")
         frame[mask] = (frame[mask] * 0.5 + color * 0.5).astype(np.uint8)
-        drawn_masks.append((pred_scores[idx], "boat", pred_masks[idx]))
 
-    # Verarbeitung der "stuff" Klassen (sky, sea)
+    # Process "stuff" classes (sky, sea)
     stuff_labels = ["sky", "sea"]
     stuff_category_ids = [metadata.stuff_classes.index(label) for label in stuff_labels if label in metadata.stuff_classes]
 
-    # Filtern der Segmente für "stuff" Klassen
+    # Filter segments for "stuff" classes
     stuff_segments = [
         seg for seg in segments_info
         if seg["category_id"] in stuff_category_ids
@@ -114,10 +159,10 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
     for seg in stuff_segments:
         label = metadata.stuff_classes[seg["category_id"]]
         mask = panoptic_seg == seg["id"]
-        color = generate_unique_color()  # Einzigartige Farbe für jede "stuff" Klasse generieren
-        print(f"Farbe für {label}: {color}")  # Überprüfen der generierten Farbe
+        color = generate_unique_color()
+        print(f"Farbe für {label}: {color}")
         frame[mask] = (frame[mask] * 0.5 + color * 0.5).astype(np.uint8)
-        drawn_masks.append((1.0, label, mask))  # Verwenden eines Standardwertes für die Konfidenz
+        drawn_masks.append((1.0, label, mask))
 
     return drawn_masks
 
@@ -155,7 +200,7 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
     # Get the drawn masks from panoptic segmentation
     drawn_masks = apply_panoptic_segmentation(image_np, panoptic_result, metadata,
                                               confidence_threshold=confidence_threshold,
-                                              max_instances=detected_boxes)
+                                              max_instances=detected_boxes,boxes_data=boxes_data)
 
     # Save the processed image
     image_path = save_image(image_np, "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Pipeline/output", f"{process_id}_processed.jpg")
@@ -270,7 +315,7 @@ def main():
     panoptic_model, metadata = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id = 1735020  # random.randint(5000, 2000000)  # Example ShipSpotting image ID
+    process_id = 1335020  # random.randint(5000, 2000000)  # Example ShipSpotting image ID
     xml_data, image_path = scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata,
                                                           detection_labels)
 
