@@ -3,9 +3,6 @@ import cv2
 import numpy as np
 import requests
 from ultralytics import YOLO
-from detectron2.engine import DefaultPredictor
-from detectron2.config import get_cfg
-from detectron2 import model_zoo
 import torch
 from bs4 import BeautifulSoup
 import io
@@ -14,32 +11,32 @@ import xml.etree.ElementTree as ET
 from ShipLabelFilter import ShipLabelFilter
 import os
 import pycocotools.mask as mask_util
-from detectron2.data import MetadataCatalog
 import logging
+
+# Importieren der SAM-Module
+from segment_anything import sam_model_registry, SamPredictor
 
 # Konfiguration des Loggings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def setup_panoptic_model():
+def setup_sam_model():
     """
-    Einrichtung des panoptischen Segmentierungsmodells mit Detectron2.
+    Einrichtung des SAM-Modells.
 
     Rückgabe:
-        tuple: Ein Tuple, das den Prädiktor und die Metadaten enthält.
+        SamPredictor: Ein SAM-Predictor-Objekt.
     """
-    cfg = get_cfg()
-    cfg.merge_from_file(model_zoo.get_config_file(
-        "COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml"))
-    cfg.MODEL.WEIGHTS = model_zoo.get_checkpoint_url(
-        "COCO-PanopticSegmentation/panoptic_fpn_R_101_3x.yaml")
-    cfg.MODEL.DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    predictor = DefaultPredictor(cfg)
+    # Pfad zum vortrainierten SAM-Modell (stellen Sie sicher, dass dieser korrekt ist)
+    sam_checkpoint = "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/sam_checkpoint/sam_vit_h_4b8939.pth"  # Verwenden Sie den Pfad zu Ihrem heruntergeladenen SAM-Modell
+    model_type = "vit_h"
 
-    # Laden der Metadaten für COCO Panoptic Segmentation
-    metadata = MetadataCatalog.get("coco_2017_val_panoptic_separated")
+    # Laden des SAM-Modells
+    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
+    sam.to('cuda' if torch.cuda.is_available() else 'cpu')
+    predictor = SamPredictor(sam)
 
-    return predictor, metadata
+    return predictor
 
 def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
     """
@@ -94,125 +91,6 @@ def generate_unique_color():
     return np.array([random.randint(0, 255), random.randint(
         0, 255), random.randint(0, 255)], dtype=np.uint8)
 
-def calculate_iou(mask, x1, y1, x2, y2):
-    """
-    Berechnet den Intersection over Union (IoU) zwischen einer Maske und einer Bounding-Box.
-
-    Argumente:
-        mask (np.ndarray): Die Segmentierungsmaske.
-        x1 (int): Obere linke x-Koordinate der Bounding-Box.
-        y1 (int): Obere linke y-Koordinate der Bounding-Box.
-        x2 (int): Untere rechte x-Koordinate der Bounding-Box.
-        y2 (int): Untere rechte y-Koordinate der Bounding-Box.
-
-    Rückgabe:
-        float: Der IoU-Wert.
-    """
-    # Sicherstellen, dass die Koordinaten innerhalb der Maskenabmessungen liegen
-    height, width = mask.shape
-    x1, y1 = max(0, x1), max(0, y1)
-    x2, y2 = min(width, x2), min(height, y2)
-
-    bbox_mask = np.zeros_like(mask, dtype=bool)
-    bbox_mask[y1:y2, x1:x2] = True
-
-    intersection = np.logical_and(mask, bbox_mask)
-    union = np.logical_or(mask, bbox_mask)
-
-    intersection_area = np.sum(intersection)
-    union_area = np.sum(union)
-
-    iou = intersection_area / union_area if union_area != 0 else 0
-    return iou
-
-def select_best_mask_within_bbox(boat_scores, boat_boxes, panoptic_masks):
-    """
-    Wählt die beste Maske innerhalb jeder Bounding-Box basierend auf dem IoU aus.
-
-    Argumente:
-        boat_scores (np.ndarray): Scores der Boots-Masken.
-        boat_boxes (list): Liste der Bounding-Box-Daten.
-        panoptic_masks (np.ndarray): Array der panoptischen Masken.
-
-    Rückgabe:
-        list: Liste der ausgewählten Masken mit Scores und Labels.
-    """
-    selected_masks = []
-    for i, box in enumerate(boat_boxes):
-        x1, y1, x2, y2 = box['x1'], box['y1'], box['x2'], box['y2']
-        best_mask = None
-        best_score = -1
-        best_iou = 0
-
-        # Finde die Maske mit dem höchsten IoU innerhalb der Bounding-Box
-        for mask, score in zip(panoptic_masks, boat_scores):
-            iou = calculate_iou(mask, x1, y1, x2, y2)
-
-            # Wähle die Maske basierend auf IoU und Score
-            if iou > best_iou:
-                best_mask = mask
-                best_score = score
-                best_iou = iou
-
-        if best_mask is not None:
-            selected_masks.append((best_score, "boat", best_mask))
-
-    return selected_masks
-
-def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_threshold=0.7, max_instances=0,
-                                boxes_data=None):
-    """
-    Wendet panoptische Segmentierung auf den Frame an und zeichnet Masken.
-
-    Argumente:
-        frame (np.ndarray): Der Bild-Frame.
-        panoptic_result (dict): Das Ergebnis der panoptischen Segmentierung.
-        metadata (Metadata): Die Metadaten für die panoptische Segmentierung.
-        confidence_threshold (float): Confidence-Schwelle für die Maskenauswahl.
-        max_instances (int): Maximale Anzahl von Instanzen, die verarbeitet werden sollen.
-        boxes_data (list, optional): Liste der Bounding-Box-Daten.
-
-    Rückgabe:
-        list: Liste der gezeichneten Masken mit Scores und Labels.
-    """
-    if boxes_data is None:
-        boxes_data = []
-    panoptic_seg, segments_info = panoptic_result["panoptic_seg"]  # Tuple aus Segmentierungsdaten und Segmentinformationen
-    panoptic_seg = panoptic_seg.cpu().numpy()
-
-    # Extrahiere und konvertiere Instanzdaten
-    instances = panoptic_result["instances"]
-    pred_classes = instances.pred_classes.cpu().numpy()
-    pred_masks = instances.pred_masks.cpu().numpy()
-    pred_scores = instances.scores.cpu().numpy()
-
-    # Filtere gültige "boat"-Segmentierungen
-    boat_class_id = metadata.thing_classes.index("boat")
-    boat_mask_indices = np.where(
-        (pred_scores > confidence_threshold) &
-        (pred_classes == boat_class_id)
-    )[0]
-
-    # Extrahiere Boots-Masken und Scores
-    boat_scores = pred_scores[boat_mask_indices]
-    boat_masks = pred_masks[boat_mask_indices]
-
-    # Wähle die besten Masken innerhalb der Bounding-Boxen aus
-    drawn_masks = select_best_mask_within_bbox(
-        boat_scores, boxes_data, boat_masks)
-
-    # Begrenze die Anzahl der Instanzen basierend auf max_instances
-    if max_instances > 0:
-        drawn_masks = drawn_masks[:max_instances]
-
-    # Zeichne die besten Masken auf das Bild
-    for score, label, mask in drawn_masks:
-        color = generate_unique_color()
-        logger.info(f"Farbe für {label}: {color}")
-        frame[mask] = (frame[mask] * 0.5 + color * 0.5).astype(np.uint8)
-
-    return drawn_masks
-
 def mask_to_rle(mask):
     """
     Konvertiert eine Maske in das RLE-Format.
@@ -244,7 +122,52 @@ def save_image(image_np, path, filename):
     cv2.imwrite(image_path, image_np)  # Speichere das Bild
     return image_path
 
-def process_image(image, yolo_model, panoptic_model, metadata, detection_labels, url, photo_label, taking_time,
+def apply_sam_segmentation(frame, predictor, boxes_data):
+    """
+    Wendet SAM-Segmentierung auf die von YOLO erkannten Bounding-Boxen an.
+
+    Argumente:
+        frame (np.ndarray): Das Originalbild.
+        predictor (SamPredictor): Das SAM-Predictor-Objekt.
+        boxes_data (list): Liste der Bounding-Box-Daten.
+
+    Rückgabe:
+        list: Liste der gezeichneten Masken mit Scores und Labels..
+    """
+    drawn_masks = []
+
+    # Bereite das Bild für SAM vor
+    predictor.set_image(frame)
+
+    for box in boxes_data:
+        x1, y1, x2, y2 = box['x1'], box['y1'], box['x2'], box['y2']
+
+        # SAM erwartet die Eingabe in der Form [x0, y0, x1, y1]
+        input_box = np.array([x1, y1, x2, y2])
+
+        # Generiere die Maske mit SAM
+        masks, scores, logits = predictor.predict(
+            point_coords=None,
+            point_labels=None,
+            box=input_box[None, :],
+            multimask_output=False
+        )
+
+        mask = masks[0]
+        score = scores[0]
+
+        # Zeichnen Sie die Maske auf das Bild
+        color = generate_unique_color()
+        mask_bool = mask.astype(bool)
+        frame[mask_bool] = (frame[mask_bool] * 0.5 + color * 0.5).astype(np.uint8)
+
+        drawn_masks.append((score, box['label'], mask_bool))
+
+        logger.info(f"Maske hinzugefügt für {box['label']} mit SAM-Score {score:.2f}")
+
+    return drawn_masks
+
+def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo_label, taking_time,
                   process_id, confidence_threshold=0.7, debug=True):
     """
     Verarbeitet ein einzelnes Bild für Detektion, Segmentierung und Klassifikation.
@@ -252,8 +175,7 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
     Argumente:
         image (PIL.Image): Das zu verarbeitende Bild.
         yolo_model (YOLO): Das YOLO-Modell für die Objektdetektion.
-        panoptic_model (DefaultPredictor): Das panoptische Segmentierungsmodell.
-        metadata (Metadata): Metadaten für die panoptische Segmentierung.
+        sam_predictor (SamPredictor): Der SAM-Predictor.
         detection_labels (list): Zu detektierende Labels.
         url (str): URL des Bildes.
         photo_label (str): Label des Fotos.
@@ -274,20 +196,20 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
     # Führe YOLO-Detektion durch
     yolo_result = yolo_model.predict(image_np)
 
-    # Wende panoptische Segmentierung an
-    panoptic_result = panoptic_model(image_np)
-
-    # Zeichne YOLO-Detektionen und wende panoptische Segmentierung an
+    # Zeichne YOLO-Detektionen und sammle die Bounding-Box-Daten
     detected_boxes, boxes_data = draw_yolo_detections(
         image_np, yolo_result, yolo_model, detection_labels)
 
-    # Hole die gezeichneten Masken aus der panoptischen Segmentierung
-    drawn_masks = apply_panoptic_segmentation(image_np, panoptic_result, metadata,
-                                              confidence_threshold=confidence_threshold,
-                                              max_instances=detected_boxes, boxes_data=boxes_data)
+    if detected_boxes == 0:
+        logger.warning("Keine Objekte in YOLO-Detektion gefunden.")
+        return None, None
+
+    # Wende SAM-Segmentierung auf die Bounding-Boxen an
+    drawn_masks = apply_sam_segmentation(
+        image_np, sam_predictor, boxes_data)
 
     # Speichere das verarbeitete Bild
-    image_path = save_image(image_np, "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Pipeline/output",
+    image_path = save_image(image_np, "Pipeline/output",
                             f"{process_id}_processed.jpg")
 
     # Erstelle XML-Struktur zum Speichern der Bildmetadaten
@@ -309,13 +231,10 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
     for score, label, mask in drawn_masks:
         rle = mask_to_rle(mask)  # Konvertiere die Maske in RLE
         mask_element = ET.SubElement(
-            image_metadata, "mask", label=label, source="auto")
+            image_metadata, "mask", label=label, source="SAM")
         rle_str = ', '.join(str(count) for count in rle["counts"])
         mask_element.set("rle", rle_str)
-        logger.info(f"Maske hinzugefügt für {label} mit Confidence {score:.2f}")
-
-    # Freigeben ungenutzter Variablen
-    del yolo_result, panoptic_result, detected_boxes, boxes_data, drawn_masks
+        logger.info(f"Maske hinzugefügt für {label} mit SAM-Score {score:.2f}")
 
     # Bild in einem Fenster mit OpenCV anzeigen (optional)
     if debug:
@@ -325,15 +244,14 @@ def process_image(image, yolo_model, panoptic_model, metadata, detection_labels,
 
     return image_metadata, image_path
 
-def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metadata, detection_labels):
+def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detection_labels):
     """
     Scrapt Bilder von ShipSpotting.com und verarbeitet sie.
 
     Argumente:
         process_id (int): Die ID des zu verarbeitenden Bildes.
         yolo_model (YOLO): Das YOLO-Modell für die Objektdetektion.
-        panoptic_model (DefaultPredictor): Das panoptische Segmentierungsmodell.
-        metadata (Metadata): Metadaten für die panoptische Segmentierung.
+        sam_predictor (SamPredictor): Der SAM-Predictor.
         detection_labels (list): Zu detektierende Labels.
 
     Rückgabe:
@@ -390,12 +308,12 @@ def scrape_and_process_ship_images(process_id, yolo_model, panoptic_model, metad
 
         logger.info(f"Lade Bild herunter von: {image_url}")
         image_response = session.get(image_url, headers=headers)
-        image = Image.open(io.BytesIO(image_response.content))
+        image = Image.open(io.BytesIO(image_response.content)).convert("RGB")
 
         label = ShipLabelFilter.filter_label(label_text)
         logger.info(f"Verarbeite Schiffsbild mit Label: {label[0]}")
 
-        xml_data, image_path = process_image(image, yolo_model, panoptic_model, metadata, detection_labels, image_url,
+        xml_data, image_path = process_image(image, yolo_model, sam_predictor, detection_labels, image_url,
                                              label[0], taken_time, process_id, debug=True)
 
         # Freigeben ungenutzter Variablen
@@ -444,16 +362,17 @@ def main():
     yolo_model = YOLO("../YoloModel/boat_detection_yolo_model_new3/weights/best.pt")
     yolo_model.to('cuda' if torch.cuda.is_available() else 'cpu')
 
-    panoptic_model, metadata = setup_panoptic_model()
+    # Initialisiere das SAM-Modell
+    sam_predictor = setup_sam_model()
     detection_labels = ["boat"]
 
-    process_id = 1335020  # Beispielhafte ShipSpotting-Bild-ID
+    process_id = 1335021  # Beispielhafte ShipSpotting-Bild-ID
     xml_data, image_path = scrape_and_process_ship_images(
-        process_id, yolo_model, panoptic_model, metadata, detection_labels)
+        process_id, yolo_model, sam_predictor, detection_labels)
 
     if xml_data:
         save_xml(xml_data, f"{process_id}_processed.xml",
-                 "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/Pipeline/output")
+                 "Pipeline/output")
 
 
 if __name__ == "__main__":
