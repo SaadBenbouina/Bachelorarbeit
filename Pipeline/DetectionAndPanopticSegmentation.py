@@ -211,25 +211,6 @@ def apply_panoptic_segmentation(frame, panoptic_result, metadata, confidence_thr
         logger.info(f"Farbe für {label}: {color}")
         frame[mask] = (frame[mask] * 0.5 + color * 0.5).astype(np.uint8)
 
-    # Verarbeite "stuff"-Klassen (Himmel, Meer)
-    stuff_labels = ["sky", "sea"]
-    stuff_category_ids = [metadata.stuff_classes.index(
-        label) for label in stuff_labels if label in metadata.stuff_classes]
-
-    # Filtere Segmente für "stuff"-Klassen
-    stuff_segments = [
-        seg for seg in segments_info
-        if seg["category_id"] in stuff_category_ids
-    ]
-
-    for seg in stuff_segments:
-        label = metadata.stuff_classes[seg["category_id"]]
-        mask = panoptic_seg == seg["id"]
-        color = generate_unique_color()
-        logger.info(f"Farbe für {label}: {color}")
-        frame[mask] = (frame[mask] * 0.5 + color * 0.5).astype(np.uint8)
-        drawn_masks.append((1.0, label, mask))
-
     return drawn_masks
 
 def mask_to_rle(mask):
@@ -466,7 +447,7 @@ def main():
     panoptic_model, metadata = setup_panoptic_model()
     detection_labels = ["boat"]
 
-    process_id = 1335021  # Beispielhafte ShipSpotting-Bild-ID
+    process_id = 1335020  # Beispielhafte ShipSpotting-Bild-ID
     xml_data, image_path = scrape_and_process_ship_images(
         process_id, yolo_model, panoptic_model, metadata, detection_labels)
 
