@@ -3,7 +3,6 @@ import requests
 from bs4 import BeautifulSoup
 from ultralytics import YOLO
 from PIL import Image
-import io
 import xml.etree.ElementTree as ET
 import logging
 
@@ -121,6 +120,12 @@ def process_image_with_yolo(image_path, category, output_dir='processed_boats'):
             for idx, box in enumerate(boxes):
                 # Konvertieren Sie box.cls von Tensor zu Python-Skalare
                 cls = box.cls.item() if hasattr(box.cls, 'item') else box.cls
+
+                # Überprüfen Sie die Konfidenz
+                confidence = box.conf.item() if hasattr(box.conf, 'item') else box.conf
+                if confidence < 0.7:
+                    logger.info(f"Detection {idx} in {image_path} skipped due to low confidence: {confidence}")
+                    continue  # Überspringen Sie diese Box
 
                 if cls == 0:  # Annahme: Klasse 0 ist 'Boat'
                     # Debugging: Ausgabe der Struktur von box.xyxy.tolist()
