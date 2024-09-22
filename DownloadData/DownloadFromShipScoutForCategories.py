@@ -6,6 +6,8 @@ from PIL import Image
 import xml.etree.ElementTree as ET
 import logging
 
+from Pipeline.ShipLabelFilter import ShipLabelFilter
+
 # Konfigurieren Sie das Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -51,14 +53,16 @@ def download_images_from_shipspotting(process_id, url_prefix='https://www.shipsp
             if information_title and information_title.text.strip() == "Photo Category:":
                 label_value = div.find('span', class_='information-item__value')
                 if label_value:
-                    labels.append(label_value.text.strip())
+                    label = ShipLabelFilter.filter_label(label_value.text.strip())
+                    print(label)
+                    labels.append(label)
 
     except Exception as e:
         logger.error(f"Error retrieving images for process_id {process_id}: {e}")
 
     return image_urls, labels
 
-def save_images_and_labels(image_urls, labels, output_dir='downloaded_images', process_id=None):
+def save_images_and_labels(image_urls, output_dir='downloaded_images', process_id=None):
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -92,12 +96,7 @@ def generate_xml(image_path, category, output_dir='processed_boats'):
 
     # Erstellen Sie die XML-Struktur
     annotation = ET.Element('annotation')
-    ET.SubElement(annotation, 'filename').text = filename
     ET.SubElement(annotation, 'category').text = category
-
-    # Optional: Weitere Informationen hinzufügen, z.B. Bounding Box
-    # Dies erfordert jedoch, dass Sie die Bounding Box-Koordinaten übergeben
-    # und die generate_xml-Funktion entsprechend anpassen
 
     # Schreiben Sie die XML-Datei
     tree = ET.ElementTree(annotation)
@@ -181,7 +180,7 @@ def main():
         logger.info(f"Labels: {labels}")
 
         # Schritt 2: Bilder speichern
-        saved_image_paths = save_images_and_labels(image_urls, labels, download_folder, process_id)
+        saved_image_paths = save_images_and_labels(image_urls, download_folder, process_id)
         logger.info(f"Saved Images: {saved_image_paths}")
 
         # Schritt 3: Bilder mit YOLO verarbeiten

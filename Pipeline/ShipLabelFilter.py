@@ -13,11 +13,8 @@ class ShipLabelFilter:
         Returns:
             str: The filtered and standardized label.
         """
-        label = label.lower().replace(" ", "_")
-        if 'inland' in label:
-            area = 'inland'
-        else:
-            area = 'sea'
+        label = label.lower().replace(" ", "")
+
         if 'overview' in label:
             label = None
         if 'wheelhouse' in label:
@@ -33,8 +30,9 @@ class ShipLabelFilter:
         if 'crests' in label:
             label = None
         if label is None:
-            return label, area
-
+            return label
+        if 'cargoship' in label:
+            label = 'cargo_ship'
         if 'livestock' in label:
             label = 'cargo_ship'
         if 'combined' in label:
@@ -171,4 +169,4 @@ class ShipLabelFilter:
             label = 'validation'
         if 'dry_cargo' in label:
             label = 'cargo_ship'
-        return label, area
+        return label
