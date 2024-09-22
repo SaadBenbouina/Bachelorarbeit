@@ -18,7 +18,7 @@ HEADERS = {
 }
 
 # Laden Sie das YOLO-Modell
-yolo_model = YOLO("../YoloModel/boat_detection_yolo_model_new3/weights/best.pt")
+yolo_model = YOLO("../YoloModel/boat_detection_yolo_model/weights/best.pt")
 
 def download_images_from_shipspotting(process_id, url_prefix='https://www.shipspotting.com/photos/'):
     image_urls = []
