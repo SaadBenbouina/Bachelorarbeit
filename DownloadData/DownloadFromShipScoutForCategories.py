@@ -197,8 +197,8 @@ def process_image_with_yolo(image_path, category, output_base_dir='processed_boa
 def main():
     start_id = 1134410
     end_id = 1134414
-    download_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ForCategory/RawData"
-    processed_boats_dir = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ForCategory/ProcessedBoats"
+    download_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/RawData"
+    processed_boats_dir = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ForCategory/train"
 
     for process_id in range(start_id, end_id):
         logger.info(f"Processing ID: {process_id}")
