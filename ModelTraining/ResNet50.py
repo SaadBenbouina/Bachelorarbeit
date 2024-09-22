@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+from future.moves import multiprocessing
 from torchvision import datasets, models, transforms
 import os
 import copy
@@ -46,9 +47,9 @@ def main():
     num_classes = len(image_datasets['train'].classes)
     class_names = image_datasets['train'].classes
 
-    num_workers = 4 if os.name != 'nt' else 0
+    num_workers = multiprocessing.cpu_count() if os.name != 'nt' else 0
     dataloaders = {x: torch.utils.data.DataLoader(
-        image_datasets[x], batch_size=32, shuffle=True, num_workers=num_workers)
+        image_datasets[x], batch_size=32, shuffle=True, num_workers=num_workers, pin_memory=True)
         for x in ['train', 'val']}
 
     dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
@@ -125,7 +126,6 @@ def main():
                     # Statistiken sammeln
                     running_loss += loss.item() * inputs.size(0)
                     running_corrects += (preds == labels).sum().item()
-
 
                 if phase == 'train':
                     scheduler.step()
