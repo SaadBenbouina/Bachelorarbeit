@@ -21,6 +21,29 @@ HEADERS = {
 # Load the YOLO model
 yolo_model = YOLO("../YoloModel/boat_detection_yolo_model/weights/best.pt")
 
+def extract_image_urls(soup):
+    image_urls = []
+    divs = soup.findAll('div', class_='summary-photo__image-row__image')
+    for div in divs:
+        img_tag = div.find('img')
+        if img_tag and 'src' in img_tag.attrs:
+            image_urls.append(img_tag['src'])
+    return image_urls
+
+def extract_labels(soup):
+    labels = []
+    label_divs = soup.find_all('div',
+                               class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item summary-photo__card-general__label')
+    for div in label_divs:
+        information_title = div.find('span', class_='information-item__title')
+        if information_title and information_title.text.strip() == "Photo Category:":
+            label_value = div.find('span', class_='information-item__value')
+            if label_value:
+                label = ShipLabelFilter.filter_label(label_value.text.strip())
+                logger.info(f"Filtered label: {label}")
+                labels.append(label)
+    return labels
+
 def download_images_from_shipspotting(process_id, url_prefix='https://www.shipspotting.com/photos/'):
     image_urls = []
     labels = []
@@ -37,24 +60,8 @@ def download_images_from_shipspotting(process_id, url_prefix='https://www.shipsp
 
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Find all image containers on the page
-        divs = soup.findAll('div', class_='summary-photo__image-row__image')
-        for div in divs:
-            img_tag = div.find('img')
-            if img_tag and 'src' in img_tag.attrs:
-                image_urls.append(img_tag['src'])
-
-        # Find the "Photo Category" labels
-        label_divs = soup.find_all('div',
-                                   class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item summary-photo__card-general__label')
-        for div in label_divs:
-            information_title = div.find('span', class_='information-item__title')
-            if information_title and information_title.text.strip() == "Photo Category:":
-                label_value = div.find('span', class_='information-item__value')
-                if label_value:
-                    label = ShipLabelFilter.filter_label(label_value.text.strip())
-                    logger.info(f"Filtered label: {label}")
-                    labels.append(label)
+        image_urls = extract_image_urls(soup)
+        labels = extract_labels(soup)
 
     except Exception as e:
         logger.error(f"Error retrieving images for process_id {process_id}: {e}")
@@ -77,7 +84,7 @@ def save_images_into_categories(image_urls, labels, output_dir='downloaded_image
     saved_paths = []
     try:
         for index, image_url in enumerate(image_urls):
-            # Prüfe, ob ein entsprechendes Label existiert
+            # Check if a corresponding label exists
             if index < len(labels):
                 label = labels[index]
             else:
@@ -98,7 +105,7 @@ def save_images_into_categories(image_urls, labels, output_dir='downloaded_image
                     continue  # Skip this image due to download error
 
                 # Define the category directory
-                category_dir = os.path.join(output_dir, label)
+                category_dir = os.path.join(output_dir, label[0])
                 os.makedirs(category_dir, exist_ok=True)
 
                 # Save the image in the category directory
