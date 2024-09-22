@@ -77,30 +77,44 @@ def save_images_into_categories(image_urls, labels, output_dir='downloaded_image
     saved_paths = []
     try:
         for index, image_url in enumerate(image_urls):
+            # Prüfe, ob ein entsprechendes Label existiert
+            if index < len(labels):
+                label = labels[index]
+            else:
+                label = None
+
+            if label is None:
+                logger.info(f"Skipping image at index {index} for process_id {process_id} due to excluded or unmapped label.")
+                continue  # Skip saving this image
+
             if image_url:
                 logger.info(f"Downloading image from {image_url}")
-                image_data = requests.get(image_url, headers=HEADERS).content
-
-                if index < len(labels):
-                    category = labels[index]
-                else:
-                    category = "Unknown"
+                try:
+                    response = requests.get(image_url, headers=HEADERS, timeout=10)
+                    response.raise_for_status()
+                    image_data = response.content
+                except requests.RequestException as req_e:
+                    logger.error(f"Failed to download image from {image_url}: {req_e}")
+                    continue  # Skip this image due to download error
 
                 # Define the category directory
-                category_dir = os.path.join(output_dir, category if category else "Unknown")
+                category_dir = os.path.join(output_dir, label)
                 os.makedirs(category_dir, exist_ok=True)
 
                 # Save the image in the category directory
                 image_filename = f'image_{process_id}_{index}.jpg'
                 image_path = os.path.join(category_dir, image_filename)
-                with open(image_path, 'wb') as image_file:
-                    image_file.write(image_data)
-                logger.info(f"Image saved to {image_path}")
-                saved_paths.append(image_path)
+                try:
+                    with open(image_path, 'wb') as image_file:
+                        image_file.write(image_data)
+                    logger.info(f"Image saved to {image_path}")
+                    saved_paths.append(image_path)
+                except IOError as io_e:
+                    logger.error(f"Failed to save image to {image_path}: {io_e}")
             else:
-                logger.warning(f"No valid image URL provided for process_id {process_id}")
+                logger.warning(f"No valid image URL provided for process_id {process_id}, index {index}")
     except Exception as e:
-        logger.error(f"Error saving image for {process_id}: {e}")
+        logger.error(f"Error saving image for process_id {process_id}: {e}")
 
     return saved_paths
 
@@ -164,8 +178,11 @@ def process_image_with_yolo(image_path, category, output_base_dir='processed_boa
                     base_filename = os.path.splitext(os.path.basename(image_path))[0]
                     boat_filename = f"{base_filename}_boat_{idx}.jpg"  # Use index as unique identifier
                     boat_path = os.path.join(category_dir, boat_filename)
-                    cropped_image.save(boat_path)
-                    logger.info(f"Cropped boat image saved to {boat_path}")
+                    try:
+                        cropped_image.save(boat_path)
+                        logger.info(f"Cropped boat image saved to {boat_path}")
+                    except IOError as io_e:
+                        logger.error(f"Failed to save cropped image to {boat_path}: {io_e}")
 
     except Exception as e:
         logger.error(f"Error processing image {image_path} with YOLO: {e}")
