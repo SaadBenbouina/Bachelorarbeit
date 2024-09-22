@@ -3,23 +3,22 @@ import requests
 from bs4 import BeautifulSoup
 from ultralytics import YOLO
 from PIL import Image
-import xml.etree.ElementTree as ET
 import logging
 
 from Pipeline.ShipLabelFilter import ShipLabelFilter
 
-# Konfigurieren Sie das Logging
+# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Definieren Sie die Header für die HTTP-Anfragen
+# Define headers for HTTP requests
 HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, wie Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
     'Referer': 'https://www.shipspotting.com',
     'Accept-Language': 'en-US,en;q=0.9',
 }
 
-# Laden Sie das YOLO-Modell
+# Load the YOLO model
 yolo_model = YOLO("../YoloModel/boat_detection_yolo_model/weights/best.pt")
 
 def download_images_from_shipspotting(process_id, url_prefix='https://www.shipspotting.com/photos/'):
@@ -38,14 +37,14 @@ def download_images_from_shipspotting(process_id, url_prefix='https://www.shipsp
 
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        # Finden Sie alle Bildcontainer auf der Seite
+        # Find all image containers on the page
         divs = soup.findAll('div', class_='summary-photo__image-row__image')
         for div in divs:
             img_tag = div.find('img')
             if img_tag and 'src' in img_tag.attrs:
                 image_urls.append(img_tag['src'])
 
-        # Finden Sie die "Photo Category" Labels
+        # Find the "Photo Category" labels
         label_divs = soup.find_all('div',
                                    class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item summary-photo__card-general__label')
         for div in label_divs:
@@ -54,7 +53,7 @@ def download_images_from_shipspotting(process_id, url_prefix='https://www.shipsp
                 label_value = div.find('span', class_='information-item__value')
                 if label_value:
                     label = ShipLabelFilter.filter_label(label_value.text.strip())
-                    print(label)
+                    logger.info(f"Filtered label: {label}")
                     labels.append(label)
 
     except Exception as e:
@@ -62,7 +61,16 @@ def download_images_from_shipspotting(process_id, url_prefix='https://www.shipsp
 
     return image_urls, labels
 
-def save_images_and_labels(image_urls, output_dir='downloaded_images', process_id=None):
+def save_images_into_categories(image_urls, labels, output_dir='downloaded_images', process_id=None):
+    """
+    Saves images into category-specific folders.
+
+    Args:
+        image_urls (list): List of image URLs to download.
+        labels (list): Corresponding list of category labels.
+        output_dir (str): Base directory to save images.
+        process_id (int): ID of the current processing batch.
+    """
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -73,8 +81,18 @@ def save_images_and_labels(image_urls, output_dir='downloaded_images', process_i
                 logger.info(f"Downloading image from {image_url}")
                 image_data = requests.get(image_url, headers=HEADERS).content
 
+                if index < len(labels):
+                    category = labels[index]
+                else:
+                    category = "Unknown"
+
+                # Define the category directory
+                category_dir = os.path.join(output_dir, category if category else "Unknown")
+                os.makedirs(category_dir, exist_ok=True)
+
+                # Save the image in the category directory
                 image_filename = f'image_{process_id}_{index}.jpg'
-                image_path = os.path.join(output_dir, image_filename)
+                image_path = os.path.join(category_dir, image_filename)
                 with open(image_path, 'wb') as image_file:
                     image_file.write(image_data)
                 logger.info(f"Image saved to {image_path}")
@@ -82,68 +100,54 @@ def save_images_and_labels(image_urls, output_dir='downloaded_images', process_i
             else:
                 logger.warning(f"No valid image URL provided for process_id {process_id}")
     except Exception as e:
-        logger.error(f"Error saving image or label for {process_id}: {e}")
+        logger.error(f"Error saving image for {process_id}: {e}")
 
     return saved_paths
 
-def generate_xml(image_path, category, output_dir='processed_boats'):
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+def process_image_with_yolo(image_path, category, output_base_dir='processed_boats'):
+    """
+    Processes an image with YOLO, crops detected boats, and saves them into category-specific folders.
 
-    filename = os.path.basename(image_path)
-    xml_filename = os.path.splitext(filename)[0] + '.xml'
-    xml_path = os.path.join(output_dir, xml_filename)
-
-    # Erstellen Sie die XML-Struktur
-    annotation = ET.Element('annotation')
-    ET.SubElement(annotation, 'category').text = category
-
-    # Schreiben Sie die XML-Datei
-    tree = ET.ElementTree(annotation)
-    tree.write(xml_path)
-    logger.info(f"XML file saved to {xml_path}")
-
-def process_image_with_yolo(image_path, category, output_dir='processed_boats'):
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
+    Args:
+        image_path (str): Path to the image to process.
+        category (str): Category label of the image.
+        output_base_dir (str): Base directory to save processed images.
+    """
     try:
-        # Laden Sie das Bild
+        # Load the image
         image = Image.open(image_path).convert("RGB")
 
-        # Führen Sie die YOLO-Detektion durch, indem Sie den Bildpfad übergeben
-        results = yolo_model(image_path)  # Alternativ: yolo_model(image)
+        # Perform YOLO detection
+        results = yolo_model(image_path)
 
         for result in results:
-            boxes = result.boxes  # Annahme: result.boxes enthält die Bounding Boxes
+            boxes = result.boxes  # Assuming result.boxes contains the bounding boxes
             for idx, box in enumerate(boxes):
-                # Konvertieren Sie box.cls von Tensor zu Python-Skalare
+                # Convert box.cls from Tensor to Python scalar
                 cls = box.cls.item() if hasattr(box.cls, 'item') else box.cls
 
-                # Überprüfen Sie die Konfidenz
+                # Check confidence
                 confidence = box.conf.item() if hasattr(box.conf, 'item') else box.conf
                 if confidence < 0.7:
                     logger.info(f"Detection {idx} in {image_path} skipped due to low confidence: {confidence}")
-                    continue  # Überspringen Sie diese Box
+                    continue  # Skip this box
 
-                if cls == 0:  # Annahme: Klasse 0 ist 'Boat'
-                    # Debugging: Ausgabe der Struktur von box.xyxy.tolist()
+                if cls == 0:  # Assuming class 0 is 'Boat'
                     xyxy = box.xyxy.tolist()
                     logger.debug(f"Original box.xyxy.tolist(): {xyxy}")
 
-                    # Überprüfen, ob xyxy eine Liste von Listen ist
+                    # Flatten if necessary
                     if isinstance(xyxy[0], list):
                         xyxy = xyxy[0]
                         logger.debug(f"Flattened box.xyxy.tolist(): {xyxy}")
 
-                    # Konvertieren Sie box.xyxy von Tensor zu Python-Liste und dann zu Integers
                     try:
                         x1, y1, x2, y2 = [int(coord) for coord in xyxy]
                     except Exception as conv_e:
                         logger.error(f"Error converting coordinates to integers: {conv_e}")
-                        continue  # Überspringen Sie diese Box
+                        continue  # Skip this box
 
-                    # Optional: Überprüfen Sie die Bildgrenzen
+                    # Optional: Check image boundaries
                     width, height = image.size
                     x1 = max(0, x1)
                     y1 = max(0, y1)
@@ -152,15 +156,16 @@ def process_image_with_yolo(image_path, category, output_dir='processed_boats'):
 
                     cropped_image = image.crop((x1, y1, x2, y2))
 
-                    # Speichern Sie das ausgeschnittene Bild
+                    # Define the category directory within the processed base directory
+                    category_dir = os.path.join(output_base_dir, category if category else "Unknown")
+                    os.makedirs(category_dir, exist_ok=True)
+
+                    # Save the cropped image in the category directory
                     base_filename = os.path.splitext(os.path.basename(image_path))[0]
-                    boat_filename = f"{base_filename}_boat_{idx}.jpg"  # Verwenden Sie den Index als eindeutigen Identifikator
-                    boat_path = os.path.join(output_dir, boat_filename)
+                    boat_filename = f"{base_filename}_boat_{idx}.jpg"  # Use index as unique identifier
+                    boat_path = os.path.join(category_dir, boat_filename)
                     cropped_image.save(boat_path)
                     logger.info(f"Cropped boat image saved to {boat_path}")
-
-                    # Erstellen Sie die XML-Datei im selben Verzeichnis
-                    generate_xml(boat_path, category, output_dir=output_dir)
 
     except Exception as e:
         logger.error(f"Error processing image {image_path} with YOLO: {e}")
@@ -174,22 +179,24 @@ def main():
     for process_id in range(start_id, end_id):
         logger.info(f"Processing ID: {process_id}")
 
-        # Schritt 1: Bilder und Labels herunterladen
+        # Step 1: Download images and labels
         image_urls, labels = download_images_from_shipspotting(process_id)
         logger.info(f"Image URLs: {image_urls}")
         logger.info(f"Labels: {labels}")
 
-        # Schritt 2: Bilder speichern
-        saved_image_paths = save_images_and_labels(image_urls, download_folder, process_id)
+        # Step 2: Save images into category-specific folders
+        saved_image_paths = save_images_into_categories(image_urls, labels, download_folder, process_id)
         logger.info(f"Saved Images: {saved_image_paths}")
 
-        # Schritt 3: Bilder mit YOLO verarbeiten
+        # Step 3: Process images with YOLO and save cropped boats
         for idx, image_path in enumerate(saved_image_paths):
+            # Determine the category for the current image
             if idx < len(labels):
                 category = labels[idx]
             else:
                 category = "Unknown"
-            process_image_with_yolo(image_path, category, output_dir=processed_boats_dir)
+
+            process_image_with_yolo(image_path, category, output_base_dir=processed_boats_dir)
 
 if __name__ == '__main__':
     main()
