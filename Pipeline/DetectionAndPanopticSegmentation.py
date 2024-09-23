@@ -2,13 +2,14 @@ import random
 import cv2
 import numpy as np
 import requests
+from torch import device
+from torchvision.transforms import transforms
 from ultralytics import YOLO
 import torch
 from bs4 import BeautifulSoup
 import io
 from PIL import Image
 import xml.etree.ElementTree as ET
-from ShipLabelFilter import ShipLabelFilter
 import os
 import pycocotools.mask as mask_util
 import logging
@@ -167,8 +168,8 @@ def apply_sam_segmentation(frame, predictor, boxes_data):
 
     return drawn_masks
 
-def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo_label, taking_time,
-                  process_id, confidence_threshold=0.7, debug=True):
+def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo_label,
+                  process_id, debug=True):
     """
     Verarbeitet ein einzelnes Bild für Detektion, Segmentierung und Klassifikation.
 
@@ -213,7 +214,7 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo
                             f"{process_id}_processed.jpg")
 
     # Erstelle XML-Struktur zum Speichern der Bildmetadaten
-    image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}", date=f"{taking_time}",
+    image_metadata = ET.Element("image", id=str(process_id), category=f"{photo_label}",
                                 width=str(width), height=str(height))
 
     # Speichere die Bounding-Boxen im XML
@@ -244,7 +245,22 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo
 
     return image_metadata, image_path
 
-def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detection_labels):
+def classify_image(image_np, model_classification):
+    # Bereite das Bild für die Klassifikation vor (verwende dieselben Transformationen wie im Training)
+    transform = transforms.Compose([transforms.Resize((224, 224)),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize([0.485, 0.456, 0.406],
+                                                         [0.229, 0.224, 0.225])])
+    image_tensor = transform(Image.fromarray(image_np)).unsqueeze(0)
+    image_tensor = image_tensor.to(device)
+
+    with torch.no_grad():
+        outputs = model_classification(image_tensor)
+        _, preds = torch.max(outputs, 1)
+
+    return preds.item()
+
+def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detection_labels, model_classification):
     """
     Scrapt Bilder von ShipSpotting.com und verarbeitet sie.
 
@@ -277,19 +293,14 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
         divs = soup.find_all('div', class_='summary-photo__image-row__image')
         image_urls = [div.find('img')['src']
                       for div in divs if div.find('img')]
+        """"
         label_divs = soup.find_all('div',
                                    class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item '
-                                          'summary-photo__card-general__label')
+                                         'summary-photo__card-general__label')
         label_text = ""
-        taken_time = ""
         for div in label_divs:
             information_title = div.find(
                 'span', class_='information-item__title')
-            if information_title and information_title.text.strip() == "Captured:":
-                taken_time_value = div.find(
-                    'span', class_='information-item__value')
-                if taken_time_value:
-                    taken_time = taken_time_value.text.strip()
             if information_title and information_title.text.strip() == "Photo Category:":
                 label_value = div.find(
                     'span', class_='information-item__value')
@@ -297,7 +308,10 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
                     # Extrahiere den Kategorie-Text
                     label_text = label_value.text.strip()
                     break
-
+                    
+        label = ShipLabelFilter.filter_label(label_text)
+        logger.info(f"Verarbeite Schiffsbild mit Label: {label[0]}")
+        """
         if not image_urls:
             logger.warning(f"Kein Bild gefunden für process_id: {process_id}")
             return None, None
@@ -309,12 +323,10 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
         logger.info(f"Lade Bild herunter von: {image_url}")
         image_response = session.get(image_url, headers=headers)
         image = Image.open(io.BytesIO(image_response.content)).convert("RGB")
-
-        label = ShipLabelFilter.filter_label(label_text)
-        logger.info(f"Verarbeite Schiffsbild mit Label: {label[0]}")
+        label_pred = classify_image(image, model_classification)
 
         xml_data, image_path = process_image(image, yolo_model, sam_predictor, detection_labels, image_url,
-                                             label[0], taken_time, process_id, debug=True)
+                                             label_pred[0], process_id, debug=True)
 
         # Freigeben ungenutzter Variablen
         del response, soup, image_response, image
@@ -361,6 +373,8 @@ def main():
     # Lade das YOLO-Modell und verschiebe es auf das entsprechende Gerät
     yolo_model = YOLO("../YoloModel/boat_detection_yolo_model_new3/weights/best.pt")
     yolo_model.to('cuda' if torch.cuda.is_available() else 'cpu')
+    model_classification = torch.load("path_to_your_trained_model.pth")
+    model_classification.eval()  # Setzt das Modell in den Evaluationsmodus
 
     # Initialisiere das SAM-Modell
     sam_predictor = setup_sam_model()
@@ -368,7 +382,7 @@ def main():
 
     process_id = 1335021  # Beispielhafte ShipSpotting-Bild-ID
     xml_data, image_path = scrape_and_process_ship_images(
-        process_id, yolo_model, sam_predictor, detection_labels)
+        process_id, yolo_model, sam_predictor, detection_labels, model_classification)
 
     if xml_data:
         save_xml(xml_data, f"{process_id}_processed.xml",
