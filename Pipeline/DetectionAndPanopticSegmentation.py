@@ -359,7 +359,7 @@ def main():
     Hauptfunktion zur Ausführung des Scraping- und Verarbeitungspipelines.
     """
     # Lade das YOLO-Modell und verschiebe es auf das entsprechende Gerät
-    yolo_model = YOLO("../YoloModel/boat_detection_yolo_model/weights/best.pt")
+    yolo_model = YOLO("../YoloModel/boat_detection_yolo_model_new3/weights/best.pt")
     yolo_model.to('cuda' if torch.cuda.is_available() else 'cpu')
 
     # Initialisiere das SAM-Modell
