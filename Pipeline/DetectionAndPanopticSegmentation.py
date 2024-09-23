@@ -28,7 +28,7 @@ def setup_sam_model():
         SamPredictor: Ein SAM-Predictor-Objekt.
     """
     # Pfad zum vortrainierten SAM-Modell (stellen Sie sicher, dass dieser korrekt ist)
-    sam_checkpoint = "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/sam_checkpoint/sam_vit_h_4b8939.pth"  # Verwenden Sie den Pfad zu Ihrem heruntergeladenen SAM-Modell
+    sam_checkpoint = "/Users/saadbenboujina/Desktop/Projects/sam_checkpoint/sam_vit_h_4b8939.pth"  # Verwenden Sie den Pfad zu Ihrem heruntergeladenen SAM-Modell
     model_type = "vit_h"
 
     # Laden des SAM-Modells
