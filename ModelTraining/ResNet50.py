@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 import multiprocessing
+
+from torch.utils.data import DataLoader
 from torchvision import datasets, models, transforms
 import os
 import copy
@@ -8,8 +10,7 @@ import time
 import logging
 from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
-from tqdm import tqdm  # Für Fortschrittsbalken
-from sklearn.metrics import classification_report, confusion_matrix
+from tqdm import tqdm
 
 # Setze den Zufallssamen für Reproduzierbarkeit
 def set_seed(seed=42):
@@ -101,17 +102,16 @@ def main():
 
     # Bestimmen der Anzahl der Arbeiter für DataLoader
     num_workers = multiprocessing.cpu_count() if os.name != 'nt' else 0
-    dataloaders = {x: torch.utils.data.DataLoader(
+    dataloaders = {x: DataLoader(
         image_datasets[x], batch_size=32, shuffle=True if x == 'train' else False, num_workers=num_workers, pin_memory=True)
-        for x in ['train', 'val', 'test']}
+        for x in ['train', 'val']}
 
-    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val', 'test']}
+    dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
 
     # Logging der Dateninformationen
     logger.info(f"Klassen: {class_names}")
     logger.info(f"Trainingsgröße: {dataset_sizes['train']}")
     logger.info(f"Validierungsgröße: {dataset_sizes['val']}")
-    logger.info(f"Testgröße: {dataset_sizes['test']}")
 
     # Bestimmen des Geräts
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -143,7 +143,7 @@ def main():
     model_ft = model_ft.to(device)
 
     # Verlustfunktion mit Klassen-Gewichten
-    criterion = nn.CrossEntropyLoss(weight=class_weights)
+    loss_fn = nn.CrossEntropyLoss(weight=class_weights)
 
     # Optimierer: Nur die Parameter mit requires_grad=True optimieren
     optimizer_ft = torch.optim.Adam(filter(lambda p: p.requires_grad, model_ft.parameters()), lr=0.001)
@@ -152,7 +152,7 @@ def main():
     exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
     # Training und Validierung
-    def train_model(model, criterion, optimizer, scheduler, num_epochs=25):
+    def train_model(model, loss_function, optimizer, scheduler, num_epochs=25):
         since = time.time()
 
         best_model_wts = copy.deepcopy(model.state_dict())
@@ -166,8 +166,8 @@ def main():
             logger.info('-' * 10)
 
             # Jede Epoche hat ein Training und eine Validierung
-            for phase in ['train', 'val']:
-                if phase == 'train':
+            for current_phase in ['train', 'val']:  # 'phase' zu 'current_phase' geändert
+                if current_phase == 'train':
                     model.train()  # Trainingsmodus
                 else:
                     model.eval()   # Evaluationsmodus
@@ -176,18 +176,18 @@ def main():
                 running_corrects = 0
 
                 # Iterieren über Daten mit Fortschrittsbalken
-                for inputs, labels in tqdm(dataloaders[phase], desc=f"{phase.capitalize()}-Phase"):
+                for inputs, labels in tqdm(dataloaders[current_phase], desc=f"{current_phase.capitalize()}-Phase"):
                     inputs = inputs.to(device)
                     labels = labels.to(device)
 
                     # Vorwärts-Pass
-                    with torch.set_grad_enabled(phase == 'train'):
+                    with torch.set_grad_enabled(current_phase == 'train'):
                         outputs = model(inputs)
                         _, preds = torch.max(outputs, 1)
-                        loss = criterion(outputs, labels)
+                        loss = loss_function(outputs, labels)
 
                         # Rückwärts-Pass und Optimierung nur im Training
-                        if phase == 'train':
+                        if current_phase == 'train':
                             optimizer.zero_grad()
                             loss.backward()
                             optimizer.step()
@@ -200,16 +200,16 @@ def main():
                     running_loss += loss.item() * inputs.size(0)
                     running_corrects += (preds == labels).sum().item()
 
-                if phase == 'train':
+                if current_phase == 'train':
                     scheduler.step()
 
-                epoch_loss = running_loss / dataset_sizes[phase]
-                epoch_acc = running_corrects / dataset_sizes[phase]
+                epoch_loss = running_loss / dataset_sizes[current_phase]
+                epoch_acc = running_corrects / dataset_sizes[current_phase]
 
-                logger.info(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+                logger.info(f'{current_phase.capitalize()} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
 
                 # Validierungsphase: Early Stopping überwachen
-                if phase == 'val':
+                if current_phase == 'val':
                     early_stopping(epoch_loss)
 
                     if epoch_acc > best_acc:
@@ -232,7 +232,7 @@ def main():
         return model
 
     # Starten des Trainings
-    model_ft = train_model(model_ft, criterion, optimizer_ft, exp_lr_scheduler, num_epochs=25)
+    model_ft = train_model(model_ft, loss_fn, optimizer_ft, exp_lr_scheduler, num_epochs=25)
 
     # Modell speichern (nur die Gewichte)
     model_save_path = 'ship_classification_resnet50.pth'
