@@ -172,4 +172,8 @@ class ShipLabelFilter:
             label = 'maintenance'
         if 'inland_dry_cargo' in label:
             label = 'cargo_ship'
+        if 'pilot_vessel' in label:
+            label = 'work_boat'
+        if 'corvettes' in label:
+            label = 'military'
         return label

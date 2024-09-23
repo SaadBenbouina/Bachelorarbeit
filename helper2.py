@@ -19,7 +19,7 @@ HEADERS = {
 }
 
 # Load the YOLO model
-yolo_model = YOLO("../YoloModel/boat_detection_yolo_model/weights/best.pt")
+yolo_model = YOLO("/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/YoloModel/boat_detection_yolo_model_new3/weights/best.pt")
 
 def extract_image_urls(soup):
     image_urls = []
@@ -195,7 +195,7 @@ def process_image_with_yolo(image_path, category, output_base_dir='processed_boa
         logger.error(f"Error processing image {image_path} with YOLO: {e}")
 
 def main():
-    start_id = 3754919
+    start_id = 3755036
     end_id = 3755219
     download_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/RawData"
     processed_boats_dir = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ForCategory/train"
