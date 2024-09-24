@@ -1,17 +1,18 @@
+import numpy as np
+import xml.etree.ElementTree as ET
+import pycocotools.mask as mask_util
 import random
 import cv2
-import numpy as np
 import requests
-from torch import device
-from torchvision.transforms import transforms
+import torchvision.transforms as transforms
 from ultralytics import YOLO
 import torch
+from torchvision import models
+import torch.nn as nn
 from bs4 import BeautifulSoup
 import io
 from PIL import Image
-import xml.etree.ElementTree as ET
 import os
-import pycocotools.mask as mask_util
 import logging
 
 # Importieren der SAM-Module
@@ -29,7 +30,7 @@ def setup_sam_model():
         SamPredictor: Ein SAM-Predictor-Objekt.
     """
     # Pfad zum vortrainierten SAM-Modell (stellen Sie sicher, dass dieser korrekt ist)
-    sam_checkpoint = "/Users/saadbenboujina/Desktop/Projects/sam_checkpoint/sam_vit_h_4b8939.pth"  # Verwenden Sie den Pfad zu Ihrem heruntergeladenen SAM-Modell
+    sam_checkpoint = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/sam_checkpoint/sam_vit_h_4b8939.pth"  # Verwenden Sie den Pfad zu Ihrem heruntergeladenen SAM-Modell
     model_type = "vit_h"
 
     # Laden des SAM-Modells
@@ -245,14 +246,28 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo
 
     return image_metadata, image_path
 
-def classify_image(image_np, model_classification):
-    # Bereite das Bild für die Klassifikation vor (verwende dieselben Transformationen wie im Training)
-    transform = transforms.Compose([transforms.Resize((224, 224)),
-                                    transforms.ToTensor(),
-                                    transforms.Normalize([0.485, 0.456, 0.406],
-                                                         [0.229, 0.224, 0.225])])
-    image_tensor = transform(Image.fromarray(image_np)).unsqueeze(0)
-    image_tensor = image_tensor.to(device)
+def classify_image(image, model_classification, device):
+    """
+    Klassifiziert ein Bild mit dem gegebenen Klassifikationsmodell.
+
+    Argumente:
+        image (PIL.Image): Das zu klassifizierende Bild.
+        model_classification (nn.Module): Das Klassifikationsmodell.
+        device (torch.device): Das verwendete Gerät (CPU oder GPU).
+
+    Rückgabe:
+        int: Die vorhergesagte Klassen-ID.
+    """
+    # Definieren der Transformationen
+    transform = transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406],
+                             [0.229, 0.224, 0.225])
+    ])
+
+    # Wenden der Transformationen auf das Bild an
+    image_tensor = transform(image).unsqueeze(0).to(device)
 
     with torch.no_grad():
         outputs = model_classification(image_tensor)
@@ -260,7 +275,8 @@ def classify_image(image_np, model_classification):
 
     return preds.item()
 
-def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detection_labels, model_classification):
+
+def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detection_labels, model_classification, device):
     """
     Scrapt Bilder von ShipSpotting.com und verarbeitet sie.
 
@@ -269,6 +285,8 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
         yolo_model (YOLO): Das YOLO-Modell für die Objektdetektion.
         sam_predictor (SamPredictor): Der SAM-Predictor.
         detection_labels (list): Zu detektierende Labels.
+        model_classification (nn.Module): Das Klassifikationsmodell.
+        device (torch.device): Das verwendete Gerät (CPU oder GPU).
 
     Rückgabe:
         tuple: XML-Daten und Pfad zum verarbeiteten Bild.
@@ -323,10 +341,10 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
         logger.info(f"Lade Bild herunter von: {image_url}")
         image_response = session.get(image_url, headers=headers)
         image = Image.open(io.BytesIO(image_response.content)).convert("RGB")
-        label_pred = classify_image(image, model_classification)
+        label_pred = classify_image(image, model_classification, device)
 
         xml_data, image_path = process_image(image, yolo_model, sam_predictor, detection_labels, image_url,
-                                             label_pred[0], process_id, debug=True)
+                                             label_pred, process_id, debug=True)
 
         # Freigeben ungenutzter Variablen
         del response, soup, image_response, image
@@ -370,10 +388,27 @@ def main():
     """
     Hauptfunktion zur Ausführung des Scraping- und Verarbeitungspipelines.
     """
+    # Definieren Sie das Gerät
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
     # Lade das YOLO-Modell und verschiebe es auf das entsprechende Gerät
     yolo_model = YOLO("../YoloModel/boat_detection_yolo_model_new3/weights/best.pt")
-    yolo_model.to('cuda' if torch.cuda.is_available() else 'cpu')
-    model_classification = torch.load("path_to_your_trained_model.pth")
+    yolo_model.to(device)
+
+    # Instanziiere das Klassifikationsmodell
+    num_classes = 16  # Ersetzen Sie dies durch die tatsächliche Anzahl Ihrer Klassen
+    model_classification = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
+    num_ftrs = model_classification.fc.in_features
+    model_classification.fc = nn.Linear(num_ftrs, num_classes)
+
+    # Pfad zu den gespeicherten Gewichten
+    model_save_path = "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/ModelTraining/ship_classification_resnet50.pth"
+
+    # Laden der state_dict
+    state_dict = torch.load(model_save_path, map_location=device)
+    # Laden der state_dict in das Modell
+    model_classification.load_state_dict(state_dict)
+    model_classification.to(device)
     model_classification.eval()  # Setzt das Modell in den Evaluationsmodus
 
     # Initialisiere das SAM-Modell
@@ -382,7 +417,7 @@ def main():
 
     process_id = 1335021  # Beispielhafte ShipSpotting-Bild-ID
     xml_data, image_path = scrape_and_process_ship_images(
-        process_id, yolo_model, sam_predictor, detection_labels, model_classification)
+        process_id, yolo_model, sam_predictor, detection_labels, model_classification, device)
 
     if xml_data:
         save_xml(xml_data, f"{process_id}_processed.xml",

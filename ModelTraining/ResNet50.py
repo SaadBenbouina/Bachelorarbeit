@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import multiprocessing
-
 from torch.utils.data import DataLoader
 from torchvision import datasets, models, transforms
 import os
@@ -151,8 +150,12 @@ def main():
     # Scheduler für Lernrate
     exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
 
+    # Verzeichnis für gespeicherte Checkpoints
+    checkpoint_dir = 'checkpoints'
+    os.makedirs(checkpoint_dir, exist_ok=True)
+
     # Training und Validierung
-    def train_model(model, loss_function, optimizer, scheduler, num_epochs=25):
+    def train_model(model, loss_function, optimizer, scheduler, num_epochs=25, save_interval=2):
         since = time.time()
 
         best_model_wts = copy.deepcopy(model.state_dict())
@@ -221,6 +224,20 @@ def main():
                         model.load_state_dict(best_model_wts)
                         return model
 
+            # Sicherheits-Checkpoint nach jedem `save_interval`-ten Epoch
+            if (epoch + 1) % save_interval == 0:
+                checkpoint_path = os.path.join(checkpoint_dir, f'checkpoint_epoch_{epoch+1}.pth')
+                torch.save({
+                    'epoch': epoch + 1,
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': scheduler.state_dict(),
+                    'best_acc': best_acc,
+                    'best_model_wts': best_model_wts,
+                    'class_weights': class_weights
+                }, checkpoint_path)
+                logger.info(f"Checkpoint gespeichert: {checkpoint_path}")
+
             logger.info("")  # Leere Zeile zur Trennung der Epochen
 
         time_elapsed = time.time() - since
@@ -232,7 +249,7 @@ def main():
         return model
 
     # Starten des Trainings
-    model_ft = train_model(model_ft, loss_fn, optimizer_ft, exp_lr_scheduler, num_epochs=25)
+    model_ft = train_model(model_ft, loss_fn, optimizer_ft, exp_lr_scheduler, num_epochs=15, save_interval=2)
 
     # Modell speichern (nur die Gewichte)
     model_save_path = 'ship_classification_resnet50.pth'
