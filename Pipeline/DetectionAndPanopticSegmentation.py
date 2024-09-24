@@ -15,6 +15,7 @@ from PIL import Image
 import os
 import logging
 
+
 # Importieren der SAM-Module
 from segment_anything import sam_model_registry, SamPredictor
 
@@ -186,8 +187,8 @@ def apply_sam_segmentation(frame, predictor, boxes_data):
 
     return drawn_masks
 
-def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo_label,
-                  process_id, debug=True):
+def process_image(image, yolo_model, sam_predictor, detection_labels, photo_label,
+                  process_id):
     """
     Verarbeitet ein einzelnes Bild für Detektion, Segmentierung und Klassifikation.
 
@@ -201,16 +202,12 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo
         taking_time (str): Zeitpunkt der Aufnahme des Fotos.
         process_id (int): Prozess-ID zur Verfolgung.
         confidence_threshold (float): Confidence-Schwelle für Detektionen.
-        debug (bool): Ob der Debug-Modus aktiviert werden soll.
 
     Rückgabe:
         tuple: XML-Element mit Metadaten und Pfad zum gespeicherten Bild.
     """
     image_np = np.array(image)
     width, height = image.size
-
-    if debug:
-        logger.info(f"Verarbeite Bild von URL: {url}")
 
     # Führe YOLO-Detektion durch
     yolo_result = yolo_model.predict(image_np)
@@ -243,8 +240,6 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo
         box_element.set("y1", str(box['y1']))
         box_element.set("x2", str(box['x2']))
         box_element.set("y2", str(box['y2']))
-        logger.info(
-            f"Bounding-Box hinzugefügt für {box['label']} mit Confidence {box['confidence']:.2f}")
 
     # Speichere die gezeichneten Masken im XML
     for score, label, mask in drawn_masks:
@@ -253,10 +248,7 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo
             image_metadata, "mask", label=label, source="SAM")
         rle_str = ', '.join(str(count) for count in rle["counts"])
         mask_element.set("rle", rle_str)
-        logger.info(f"Maske hinzugefügt für {label} mit SAM-Score {score:.2f}")
 
-    # Bild in einem Fenster mit OpenCV anzeigen (optional)
-    if debug:
         cv2.imshow(f"Verarbeitetes Bild: {photo_label}", image_np)
         cv2.waitKey(0)  # Warte auf Tastendruck zum Schließen des Fensters
         cv2.destroyAllWindows()  # Schließe das Fenster
@@ -355,14 +347,13 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
         if image_url.startswith('/'):
             image_url = 'https://www.shipspotting.com' + image_url
 
-        logger.info(f"Lade Bild herunter von: {image_url}")
         image_response = session.get(image_url, headers=headers)
         image = Image.open(io.BytesIO(image_response.content)).convert("RGB")
         label_pred = map_number_to_ship(classify_image(image, model_classification, device))
-        logger.info(f"Kategory ist : {label_pred}")
+        logger.info(f"Schiffkategory ist : {label_pred}")
 
-        xml_data, image_path = process_image(image, yolo_model, sam_predictor, detection_labels, image_url,
-                                             label_pred, process_id, debug=True)
+        xml_data, image_path = process_image(image, yolo_model, sam_predictor, detection_labels,
+                                             label_pred, process_id)
 
         # Freigeben ungenutzter Variablen
         del response, soup, image_response, image
@@ -399,7 +390,6 @@ def save_xml(xml_data, file_name="output.xml", path=""):
     # Einrücken der XML-Struktur für eine schönere Darstellung
     ET.indent(tree, space="  ", level=0)  # Füge Einrückungen und Zeilenumbrüche hinzu
     tree.write(file_path)
-    logger.info(f"XML-Daten gespeichert unter {file_path}")
     return file_path
 
 def main():
@@ -414,7 +404,7 @@ def main():
     yolo_model.to(device)
 
     # Instanziiere das Klassifikationsmodell
-    num_classes = 16  # Ersetzen Sie dies durch die tatsächliche Anzahl Ihrer Klassen
+    num_classes = 16
     model_classification = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     num_ftrs = model_classification.fc.in_features
     model_classification.fc = nn.Linear(num_ftrs, num_classes)
