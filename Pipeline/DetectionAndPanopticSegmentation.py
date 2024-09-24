@@ -18,6 +18,8 @@ import logging
 # Importieren der SAM-Module
 from segment_anything import sam_model_registry, SamPredictor
 
+from Pipeline.Mapper import map_number_to_ship
+
 # Konfiguration des Loggings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -62,8 +64,8 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
         class_id = int(box.cls[0])
         label = yolo_model.names[class_id]
         confidence = box.conf[0]
-        # Berücksichtige nur Bounding-Boxen mit Confidence > 0.5 für die relevanten Labels
-        if confidence > 0.5 and label in detection_labels:
+        # Berücksichtige nur Bounding-Boxen mit Confidence > 0.6 für die relevanten Labels
+        if confidence > 0.6 and label in detection_labels:
             detected_boxes += 1
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             confidence = box.conf[0]
@@ -211,7 +213,7 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, url, photo
         image_np, sam_predictor, boxes_data)
 
     # Speichere das verarbeitete Bild
-    image_path = save_image(image_np, "Pipeline/output",
+    image_path = save_image(image_np, "output",
                             f"{process_id}_processed.jpg")
 
     # Erstelle XML-Struktur zum Speichern der Bildmetadaten
@@ -341,7 +343,8 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
         logger.info(f"Lade Bild herunter von: {image_url}")
         image_response = session.get(image_url, headers=headers)
         image = Image.open(io.BytesIO(image_response.content)).convert("RGB")
-        label_pred = classify_image(image, model_classification, device)
+        label_pred = map_number_to_ship(classify_image(image, model_classification, device))
+        logger.info(f"Kategory ist : {label_pred}")
 
         xml_data, image_path = process_image(image, yolo_model, sam_predictor, detection_labels, image_url,
                                              label_pred, process_id, debug=True)
@@ -415,7 +418,7 @@ def main():
     sam_predictor = setup_sam_model()
     detection_labels = ["boat"]
 
-    process_id = 1335021  # Beispielhafte ShipSpotting-Bild-ID
+    process_id = 454847  # Beispielhafte ShipSpotting-Bild-ID
     xml_data, image_path = scrape_and_process_ship_images(
         process_id, yolo_model, sam_predictor, detection_labels, model_classification, device)
 
