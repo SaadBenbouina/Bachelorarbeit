@@ -128,15 +128,15 @@ def save_image(image_np, path, filename):
 
 def apply_sam_segmentation(frame, predictor, boxes_data):
     """
-    Wendet SAM-Segmentierung auf die von YOLO erkannten Bounding-Boxen an.
+    Applies SAM segmentation to the bounding boxes using point prompts.
 
-    Argumente:
-        frame (np.ndarray): Das Originalbild.
-        predictor (SamPredictor): Das SAM-Predictor-Objekt.
-        boxes_data (list): Liste der Bounding-Box-Daten.
+    Args:
+        frame (np.ndarray): The original image.
+        predictor (SamPredictor): The SAM predictor object.
+        boxes_data (list): List of bounding box data.
 
-    Rückgabe:
-        list: Liste der gezeichneten Masken mit Scores und Labels..
+    Returns:
+        list: List of drawn masks with scores and labels.
     """
     drawn_masks = []
 
@@ -149,10 +149,25 @@ def apply_sam_segmentation(frame, predictor, boxes_data):
         # SAM erwartet die Eingabe in der Form [x0, y0, x1, y1]
         input_box = np.array([x1, y1, x2, y2])
 
-        # Generiere die Maske mit SAM
+        # Generate point prompts
+        # Positive point at the center of the lower half of the bounding box
+        pos_x = x1 + (x2 - x1) / 2
+        pos_y = y1 + 3 * (y2 - y1) / 4  # Lower half
+        positive_point = np.array([[pos_x, pos_y]])
+
+        # Negative point at the center of the top edge of the bounding box
+        neg_x = x1 + (x2 - x1) / 2
+        neg_y = y1 + (y2 - y1) / 4  # Upper quarter
+        negative_point = np.array([[neg_x, neg_y]])
+
+        # Combine points
+        point_coords = np.vstack([positive_point, negative_point])
+        point_labels = np.array([1, 0])  # 1 for positive, 0 for negative
+
+        # Generate the mask with SAM
         masks, scores, logits = predictor.predict(
-            point_coords=None,
-            point_labels=None,
+            point_coords=point_coords,
+            point_labels=point_labels,
             box=input_box[None, :],
             multimask_output=False
         )
@@ -418,13 +433,13 @@ def main():
     sam_predictor = setup_sam_model()
     detection_labels = ["boat"]
 
-    process_id = 454847  # Beispielhafte ShipSpotting-Bild-ID
+    process_id = 954847  # Beispielhafte ShipSpotting-Bild-ID
     xml_data, image_path = scrape_and_process_ship_images(
         process_id, yolo_model, sam_predictor, detection_labels, model_classification, device)
 
     if xml_data:
         save_xml(xml_data, f"{process_id}_processed.xml",
-                 "Pipeline/output")
+                 "output")
 
 
 if __name__ == "__main__":
