@@ -405,7 +405,7 @@ def main():
     model_classification.fc = nn.Linear(num_ftrs, num_classes)
 
     # Pfad zu den gespeicherten Gewichten
-    model_save_path = "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/ModelTraining/ship_classification_resnet50.pth"
+    model_save_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ship_classification_resnet50.pth"
 
     # Laden der state_dict
     state_dict = torch.load(model_save_path, map_location=device)
