@@ -14,6 +14,7 @@ import io
 from PIL import Image
 import os
 import logging
+import multiprocessing
 
 
 # Importieren der SAM-Module
@@ -248,11 +249,11 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, photo_labe
             image_metadata, "mask", label=label, source="SAM")
         rle_str = ', '.join(str(count) for count in rle["counts"])
         mask_element.set("rle", rle_str)
-
+    """"
         cv2.imshow(f"Verarbeitetes Bild: {photo_label}", image_np)
         cv2.waitKey(0)  # Warte auf Tastendruck zum Schließen des Fensters
         cv2.destroyAllWindows()  # Schließe das Fenster
-
+    """
     return image_metadata, image_path
 
 def classify_image(image, model_classification, device):
@@ -392,6 +393,23 @@ def save_xml(xml_data, file_name="output.xml", path=""):
     tree.write(file_path)
     return file_path
 
+def process_single_image(process_id, yolo_model, sam_predictor, detection_labels, model_classification, device):
+    """
+    Wrapper function to process a single image by its process_id. Used in multiprocessing.
+
+    Args:
+        process_id (int): The process ID of the image to scrape and process.
+        yolo_model (YOLO): The YOLO object detection model.
+        sam_predictor (SamPredictor): The SAM predictor model.
+        detection_labels (list): List of detection labels for YOLO.
+        model_classification (nn.Module): The classification model.
+        device (torch.device): The device (CPU/GPU).
+
+    Returns:
+        tuple: XML data and path to the processed image.
+    """
+    return scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detection_labels, model_classification, device)
+
 def main():
     """
     Hauptfunktion zur Ausführung des Scraping- und Verarbeitungspipelines.
@@ -411,10 +429,7 @@ def main():
 
     # Pfad zu den gespeicherten Gewichten
     model_save_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ship_classification_resnet50.pth"
-
-    # Laden der state_dict
     state_dict = torch.load(model_save_path, map_location=device)
-    # Laden der state_dict in das Modell
     model_classification.load_state_dict(state_dict)
     model_classification.to(device)
     model_classification.eval()  # Setzt das Modell in den Evaluationsmodus
@@ -423,14 +438,26 @@ def main():
     sam_predictor = setup_sam_model()
     detection_labels = ["boat"]
 
-    process_id = 954847  # Beispielhafte ShipSpotting-Bild-ID
-    xml_data, image_path = scrape_and_process_ship_images(
-        process_id, yolo_model, sam_predictor, detection_labels, model_classification, device)
+    # Define the list of process IDs (e.g., a list of ship spotting image IDs)
+    process_ids = [954844]  # Example of multiple IDs
 
-    if xml_data:
-        save_xml(xml_data, f"{process_id}_processed.xml",
-                 "output")
+    # Use a multiprocessing pool to process the images in parallel
+    pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
 
+    # Create a partial function that passes the static arguments to the multiprocessing worker
+    args = [(process_id, yolo_model, sam_predictor, detection_labels, model_classification, device) for process_id in process_ids]
+
+    # Run the processing in parallel
+    results = pool.starmap(process_single_image, args)
+
+    # Save results
+    for xml_data, image_path in results:
+        if xml_data:
+            process_id = xml_data.attrib['id']
+            save_xml(xml_data, f"{process_id}_processed.xml", "output")
+
+    pool.close()
+    pool.join()
 
 if __name__ == "__main__":
     main()
