@@ -2,9 +2,6 @@
 path: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo
 train: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
 val: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
-test: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
-
-
 
 nc: 1
 # Main categories
