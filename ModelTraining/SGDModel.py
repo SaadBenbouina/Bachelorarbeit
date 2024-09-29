@@ -6,6 +6,19 @@ from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
 from torch.utils.data import DataLoader
 import os
 from PIL import Image
+import logging
+import time
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,  # Change to DEBUG for more detailed logs
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),  # Log to console
+        logging.FileHandler('training.log')  # Log to a file
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Definiere den Dataset-Klasse
 class CustomDataset(torch.utils.data.Dataset):
@@ -144,7 +157,7 @@ def visualize_sample(dataset, idx, class_names=None):
     plt.show()
 
 def main():
-    dataset_root = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train2"
+    dataset_root = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train"
 
     transform = transforms.Compose([
         transforms.Resize((800, 800)),
@@ -163,11 +176,13 @@ def main():
     # visualize_sample(dataset, 2, class_names)
 
     total_samples = len(dataset)
+    logger.info(f"Total samples in dataset: {total_samples}")
 
     num_test = min(50, total_samples // 5)
     num_train = total_samples - num_test
+    logger.info(f"Training samples: {num_train}, Testing samples: {num_test}")
 
-    train_dataset, _ = torch.utils.data.random_split(dataset, [num_train, num_test])
+    train_dataset, test_dataset = torch.utils.data.random_split(dataset, [num_train, num_test])
 
     train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=collate_fn, num_workers=0)
 
@@ -175,18 +190,22 @@ def main():
     model = get_model(num_classes)
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     model.to(device)
+    logger.info(f"Using device: {device}")
 
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.SGD(params, lr=0.005, momentum=0.9, weight_decay=0.0005)
 
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
-    num_epochs = 2
+    num_epochs = 5
     for epoch in range(num_epochs):
-        print(f"Starting Epoch {epoch + 1}/{num_epochs}")
+        epoch_start = time.time()
+        logger.info(f"========== Starting Epoch {epoch + 1}/{num_epochs} ==========")
         model.train()
         running_loss = 0.0
         for batch_idx, (images, targets) in enumerate(train_loader, 1):
+            batch_start = time.time()
+
             images = list(image.to(device) for image in images)
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
@@ -197,15 +216,31 @@ def main():
             losses.backward()
             optimizer.step()
 
+            batch_time = time.time() - batch_start
+
             running_loss += losses.item()
+
+            if batch_idx % 10 == 0 or batch_idx == len(train_loader):
+                logger.info(f"Epoch [{epoch + 1}/{num_epochs}], "
+                            f"Batch [{batch_idx}/{len(train_loader)}], "
+                            f"Loss: {losses.item():.4f}, "
+                            f"Batch Time: {batch_time:.2f}s")
 
         lr_scheduler.step()
         avg_train_loss = running_loss / len(train_loader)
-        print(f"Finished Epoch {epoch + 1}/{num_epochs}")
-        print(f"Epoch: {epoch + 1}, Training Loss: {avg_train_loss:.4f}")
+        epoch_time = time.time() - epoch_start
+        logger.info(f"========== Finished Epoch {epoch + 1}/{num_epochs} ==========")
+        logger.info(f"Epoch [{epoch + 1}/{num_epochs}], Average Training Loss: {avg_train_loss:.4f}, "
+                    f"Epoch Time: {epoch_time:.2f}s")
 
-    torch.save(model.state_dict(), "fasterrcnn_model.pth")
-    print("Modell gespeichert als 'fasterrcnn_model.pth'")
+        # Modell nach jeder Epoche speichern
+        model_save_path = f"fasterrcnn_epoch_{epoch + 1}.pth"
+        torch.save(model.state_dict(), model_save_path)
+        logger.info(f"Model saved as '{model_save_path}'")
+
+    # Finales Modell speichern
+    torch.save(model.state_dict(), "fasterrcnn_final.pth")
+    logger.info("Final model saved as 'fasterrcnn_final.pth'")
 
 if __name__ == "__main__":
     main()
