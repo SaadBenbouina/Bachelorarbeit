@@ -131,10 +131,17 @@ class CustomDataset(torch.utils.data.Dataset):
         return len(self.basenames)
 
 # Funktion zum Anpassen des Modells
-def get_model(num_classes):
+def get_model(num_classes, pretrained_path=None):
     model = torchvision.models.detection.fasterrcnn_resnet50_fpn(weights=torchvision.models.detection.FasterRCNN_ResNet50_FPN_Weights.COCO_V1)
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+
+    if pretrained_path and os.path.exists(pretrained_path):
+        model.load_state_dict(torch.load(pretrained_path, map_location=torch.device('cpu')))
+        logger.info(f"Vortrainiertes Modell von '{pretrained_path}' geladen.")
+    else:
+        logger.info("Kein vortrainiertes Modell gefunden. Verwende das Standard-COCO-gewichtete Modell.")
+
     return model
 
 def collate_fn(batch):
@@ -157,7 +164,8 @@ def visualize_sample(dataset, idx, class_names=None):
     plt.show()
 
 def main():
-    dataset_root = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train"
+    pretrained_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ModelTraining/fasterrcnn_final.pth"  # **Passe diesen Pfad an deine Datei an**
+    dataset_root = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/test"
 
     transform = transforms.Compose([
         transforms.Resize((800, 800)),
@@ -187,7 +195,7 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, collate_fn=collate_fn, num_workers=0)
 
     num_classes = 2  # Hintergrund + eine Klasse
-    model = get_model(num_classes)
+    model = get_model(num_classes, pretrained_path)  # Übergib den pretrained_path
     device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     model.to(device)
     logger.info(f"Using device: {device}")
@@ -197,7 +205,7 @@ def main():
 
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
-    num_epochs = 5
+    num_epochs = 10
     for epoch in range(num_epochs):
         epoch_start = time.time()
         logger.info(f"========== Starting Epoch {epoch + 1}/{num_epochs} ==========")

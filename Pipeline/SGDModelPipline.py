@@ -44,12 +44,13 @@ def setup_sam_model():
     sam_checkpoint = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/sam_checkpoint/sam_vit_h_4b8939.pth"
     model_type = "vit_h"
 
-    # Load the SAM model
+    # Load the SAM model without weights_only
     sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
     sam.to('cuda' if torch.cuda.is_available() else 'cpu')
     predictor = SamPredictor(sam)
 
     return predictor
+
 
 def load_faster_rcnn_model(num_classes, model_path, device):
     """
@@ -73,8 +74,8 @@ def load_faster_rcnn_model(num_classes, model_path, device):
     # Replace the pre-trained head with a new one (for your specific number of classes)
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
 
-    # Load the trained weights
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    # Load the trained weights with weights_only=True
+    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
 
     # Move the model to the appropriate device
     model.to(device)
@@ -99,11 +100,11 @@ def load_classification_model(model_path, num_classes, device):
     in_features = model.fc.in_features
     model.fc = nn.Linear(in_features, num_classes)
 
-    # Load the trained weights
+    # Load the trained weights with weights_only=True
     if not os.path.exists(model_path):
         logger.error(f"Classification model file not found at {model_path}")
         return None
-    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.load_state_dict(torch.load(model_path, map_location=device, weights_only=True))
 
     # Move the model to the appropriate device
     model.to(device)
@@ -111,7 +112,7 @@ def load_classification_model(model_path, num_classes, device):
 
     return model
 
-def perform_faster_rcnn_detection(image, model, device, detection_labels, confidence_threshold=0.6):
+def perform_faster_rcnn_detection(image, model, device, detection_labels, confidence_threshold=0.7):
     """
     Performs object detection using Faster R-CNN.
 
@@ -206,7 +207,7 @@ def save_image(image_np, path, filename):
 
 def apply_sam_segmentation(frame, predictor, boxes_data):
     """
-    Applies SAM segmentation to the bounding boxes using point prompts.
+    Applies SAM segmentation to the bounding boxes using point prompts and draws bounding boxes.
 
     Args:
         frame (np.ndarray): The original image.
@@ -262,6 +263,15 @@ def apply_sam_segmentation(frame, predictor, boxes_data):
 
         logger.info(f"Mask added for {box['label']} with SAM-Score {score:.2f}")
 
+        # Convert RGB to BGR for OpenCV
+        color_bgr = color[::-1]
+
+        # Draw bounding box using OpenCV
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color_bgr.tolist(), 2)
+        label_text = f"{box['label']} {box['confidence']:.2f}"
+        cv2.putText(frame, label_text, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color_bgr.tolist(), 2)
+
     return drawn_masks
 
 def process_image(image, faster_rcnn_model, sam_predictor, detection_labels, photo_label,
@@ -286,15 +296,14 @@ def process_image(image, faster_rcnn_model, sam_predictor, detection_labels, pho
     width, height = image.size
 
     # Perform object detection using Faster R-CNN
-    detected_boxes, boxes_data = perform_faster_rcnn_detection(image, faster_rcnn_model, device, detection_labels)
+    detected_boxes, boxes_data = perform_faster_rcnn_detection(image, faster_rcnn_model, device, detection_labels, confidence_threshold=0.7)
 
     if detected_boxes == 0:
         logger.warning("Keine Objekte in Faster R-CNN-Detektion gefunden.")
         return None, None
 
     # Apply SAM segmentation to the bounding boxes
-    drawn_masks = apply_sam_segmentation(
-        image_np, sam_predictor, boxes_data)
+    drawn_masks = apply_sam_segmentation(image_np, sam_predictor, boxes_data)
 
     # Save the processed image
     image_path = save_image(image_np, "output",
@@ -401,24 +410,18 @@ def scrape_and_process_ship_images(process_id, faster_rcnn_model, sam_predictor,
         label_pred = map_number_to_ship(classify_image(image, model_classification, device))
         logger.info(f"Ship category is: {label_pred}")
 
-        # Perform object detection using Faster R-CNN
-        detected_boxes, boxes_data = perform_faster_rcnn_detection(image, faster_rcnn_model, device, detection_labels)
+        # Perform object detection using Faster R-CNN with confidence_threshold=0.7
+        detected_boxes, boxes_data = perform_faster_rcnn_detection(
+            image, faster_rcnn_model, device, detection_labels, confidence_threshold=0.7)
 
         if detected_boxes == 0:
             logger.warning("Keine Objekte in Faster R-CNN-Detektion gefunden.")
             return None, None
 
         # Apply SAM segmentation to the bounding boxes
+        image_np = np.array(image)  # Convert PIL image to NumPy array
         drawn_masks = apply_sam_segmentation(
-            np.array(image), sam_predictor, boxes_data)
-
-        # Convert PIL image to numpy array after segmentation
-        image_np = np.array(image)
-
-        # Draw masks on the image
-        for score, label, mask in drawn_masks:
-            color = generate_unique_color()
-            image_np[mask] = (image_np[mask] * 0.5 + color * 0.5).astype(np.uint8)
+            image_np, sam_predictor, boxes_data)
 
         # Save the processed image
         image_path = save_image(image_np, "output",
@@ -524,7 +527,7 @@ def main():
     detection_labels = ["boat"]  # Adjust based on your classes
 
     # Define the list of process IDs (e.g., a list of ship spotting image IDs)
-    process_ids = [954844,933366,154844,534844]  # Example of multiple IDs
+    process_ids = [954844, 933366, 154844, 534844]  # Example of multiple IDs
 
     # Path to the saved Classification model
     classification_model_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ship_classification_resnet50.pth"  # Update this path
