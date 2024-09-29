@@ -439,7 +439,7 @@ def main():
     detection_labels = ["boat"]
 
     # Define the list of process IDs (e.g., a list of ship spotting image IDs)
-    process_ids = [154844,254848,257844,354944,494844,534844,199955,333366]  # Example of multiple IDs
+    process_ids = [954844,933366,154844,534844]  # Example of multiple IDs
 
     # Use a multiprocessing pool to process the images in parallel
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
