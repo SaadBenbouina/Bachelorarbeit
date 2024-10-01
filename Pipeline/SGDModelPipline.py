@@ -517,7 +517,7 @@ def main():
     num_classes = 2  # Example: 1 class + background
 
     # Path to the saved Faster R-CNN weights
-    faster_rcnn_model_path = "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/ModelTraining/fasterrcnn_final.pth"
+    faster_rcnn_model_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/fasterrcnn_final.pth"
 
     # Load the Faster R-CNN model
     faster_rcnn_model = load_faster_rcnn_model(num_classes, faster_rcnn_model_path, device)
@@ -527,7 +527,7 @@ def main():
     detection_labels = ["boat"]  # Adjust based on your classes
 
     # Define the list of process IDs (e.g., a list of ship spotting image IDs)
-    process_ids = [954844, 933366, 154844, 534844]  # Example of multiple IDs
+    process_ids = [954844, 933366]  # Example of multiple IDs
 
     # Path to the saved Classification model
     classification_model_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ship_classification_resnet50.pth"  # Update this path
