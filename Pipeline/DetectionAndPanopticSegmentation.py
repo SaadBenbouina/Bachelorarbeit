@@ -130,43 +130,69 @@ def save_image(image_np, path, filename):
 
 def apply_sam_segmentation(frame, predictor, boxes_data):
     """
-    Applies SAM segmentation to the bounding boxes using point prompts.
+    Wendet die SAM-Segmentierung auf die Bounding-Boxen an, indem positive und negative Punkte verwendet werden.
 
-    Args:
-        frame (np.ndarray): The original image.
-        predictor (SamPredictor): The SAM predictor object.
-        boxes_data (list): List of bounding box data.
+    Argumente:
+        frame (np.ndarray): Das Originalbild.
+        predictor (SamPredictor): Das SAM-Predictor-Objekt.
+        boxes_data (list): Liste der Bounding-Box-Daten.
 
-    Returns:
-        list: List of drawn masks with scores and labels.
+    Rückgabe:
+        list: Liste der gezeichneten Masken mit Scores und Labels.
     """
     drawn_masks = []
-
-    # Bereite das Bild für SAM vor
     predictor.set_image(frame)
+    image_height, image_width = frame.shape[:2]
 
     for box in boxes_data:
         x1, y1, x2, y2 = box['x1'], box['y1'], box['x2'], box['y2']
-
-        # SAM erwartet die Eingabe in der Form [x0, y0, x1, y1]
         input_box = np.array([x1, y1, x2, y2])
 
-        # Generate point prompts
-        # Positive point at the center of the lower half of the bounding box
-        pos_x = x1 + (x2 - x1) / 2
-        pos_y = y1 + 3 * (y2 - y1) / 4  # Lower half
-        positive_point = np.array([[pos_x, pos_y]])
+        # Positive Punkte
+        positive_points = np.array([
+            [x1 + (x2 - x1) * 0.5, y1 + (y2 - y1) * 0.6],    # Mittlerer Punkt
+            [x1 + (x2 - x1) * 0.5, y1 + (y2 - y1) * 0.85],   # Unterer mittlerer Bereich
+            [x1 + (x2 - x1) * 0.7, y1 + (y2 - y1) * 0.85],   # Unterer rechter Bereich
+        ])
 
-        # Negative point at the center of the top edge of the bounding box
-        neg_x = x1 + (x2 - x1) / 2
-        neg_y = y1 + (y2 - y1) / 4  # Upper quarter
-        negative_point = np.array([[neg_x, neg_y]])
+        # Negative Punkte
+        neg_x = x1 + (x2 - x1) * 0.5
+        neg_y = y1 - (y2 - y1) * 0.1
+        neg_y2 = y1 + (y2 - y1) * 0.05
+        neg_x2 = x1 + (x2 - x1) * 0.05
+        neg_x3 =x1 + (x2 - x1) * 0.35
+        neg_y3 =  y1 + (y2 - y1) * 0.2
+        neg_x4 =x1 + (x2 - x1) * 0.75
+        neg_y4 = y1 + (y2 - y1) * 0.2
+        neg_x5 =x1 + (x2 - x1) * 0.9
+        neg_y5 =  y1 + (y2 - y1) * 0.15
+        neg_x6 =x1 + (x2 - x1) * 0.1
+        neg_y6 =  y1 + (y2 - y1) * 0.15
 
-        # Combine points
-        point_coords = np.vstack([positive_point, negative_point])
-        point_labels = np.array([1, 0])  # 1 for positive, 0 for negative
+        # Prüfen und Anpassen der negativen Punkte, um sicherzustellen, dass sie innerhalb des Bildes liegen
+        if neg_y < 0:
+            neg_y = y2 + (y2 - y1) * 0.1
+            if neg_y > image_height - 1:
+                neg_y = image_height - 1
 
-        # Generate the mask with SAM
+        if neg_x2 < 0:
+            neg_x2 = 0
+
+        negative_points = np.array([
+            [neg_x, neg_y],
+            [neg_x2, neg_y2],
+            [neg_x3, neg_y3],
+            [neg_x4, neg_y4],
+            [neg_x5, neg_y5],
+            [neg_x6, neg_y6]
+
+        ])
+
+        # Kombiniere die Punkte
+        point_coords = np.vstack([positive_points, negative_points])
+        point_labels = np.array([1] * len(positive_points) + [0] * len(negative_points))
+
+        # Generiere die Maske mit SAM
         masks, scores, logits = predictor.predict(
             point_coords=point_coords,
             point_labels=point_labels,
@@ -226,7 +252,7 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, photo_labe
         image_np, sam_predictor, boxes_data)
 
     # Speichere das verarbeitete Bild
-    image_path = save_image(image_np, "output",
+    image_path = save_image(image_np, "output1",
                             f"{process_id}_processed.jpg")
 
     # Erstelle XML-Struktur zum Speichern der Bildmetadaten
@@ -321,25 +347,7 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
         divs = soup.find_all('div', class_='summary-photo__image-row__image')
         image_urls = [div.find('img')['src']
                       for div in divs if div.find('img')]
-        """"
-        label_divs = soup.find_all('div',
-                                   class_='InformationItem__InfoItemStyle-sc-r4h3tv-0 hfSVPp information-item '
-                                         'summary-photo__card-general__label')
-        label_text = ""
-        for div in label_divs:
-            information_title = div.find(
-                'span', class_='information-item__title')
-            if information_title and information_title.text.strip() == "Photo Category:":
-                label_value = div.find(
-                    'span', class_='information-item__value')
-                if label_value:
-                    # Extrahiere den Kategorie-Text
-                    label_text = label_value.text.strip()
-                    break
-                    
-        label = ShipLabelFilter.filter_label(label_text)
-        logger.info(f"Verarbeite Schiffsbild mit Label: {label[0]}")
-        """
+
         if not image_urls:
             logger.warning(f"Kein Bild gefunden für process_id: {process_id}")
             return None, None
@@ -366,7 +374,7 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
     finally:
         session.close()
 
-def save_xml(xml_data, file_name="output.xml", path=""):
+def save_xml(xml_data, file_name="output1.xml", path=""):
     """
     Speichert XML-Daten mit Detektions-, Segmentierungs- und Klassifikationsdaten.
 
@@ -418,7 +426,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Lade das YOLO-Modell und verschiebe es auf das entsprechende Gerät
-    yolo_model = YOLO("../YoloModel/boat_detection_yolo_model_new3/weights/best.pt")
+    yolo_model = YOLO("/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/boat_detection_yolo_model_new6/weights/best.pt")
     yolo_model.to(device)
 
     # Instanziiere das Klassifikationsmodell
@@ -439,7 +447,7 @@ def main():
     detection_labels = ["boat"]
 
     # Define the list of process IDs (e.g., a list of ship spotting image IDs)
-    process_ids = [954844,933366,154844,534844]  # Example of multiple IDs
+    process_ids = [46844]  # Example of multiple IDs
 
     # Use a multiprocessing pool to process the images in parallel
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
@@ -454,7 +462,7 @@ def main():
     for xml_data, image_path in results:
         if xml_data:
             process_id = xml_data.attrib['id']
-            save_xml(xml_data, f"{process_id}_processed.xml", "output")
+            save_xml(xml_data, f"{process_id}_processed.xml", "output1")
 
     pool.close()
     pool.join()
