@@ -16,46 +16,15 @@ import os
 import logging
 import multiprocessing
 
-
-# Importieren der SAM-Module
-from segment_anything import sam_model_registry, SamPredictor
-
 from Pipeline.Mapper import map_number_to_ship
 
 # Konfiguration des Loggings
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def setup_sam_model():
-    """
-    Einrichtung des SAM-Modells.
-
-    Rückgabe:
-        SamPredictor: Ein SAM-Predictor-Objekt.
-    """
-    # Pfad zum vortrainierten SAM-Modell (stellen Sie sicher, dass dieser korrekt ist)
-    sam_checkpoint = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/sam_checkpoint/sam_vit_h_4b8939.pth"  # Verwenden Sie den Pfad zu Ihrem heruntergeladenen SAM-Modell
-    model_type = "vit_h"
-
-    # Laden des SAM-Modells
-    sam = sam_model_registry[model_type](checkpoint=sam_checkpoint)
-    sam.to('cuda' if torch.cuda.is_available() else 'cpu')
-    predictor = SamPredictor(sam)
-
-    return predictor
-
 def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
     """
     Zeichnet YOLO-Detektionen auf den Frame und sammelt Bounding-Box-Daten.
-
-    Argumente:
-        frame (np.ndarray): Der Bild-Frame.
-        yolo_result (list): Die YOLO-Detektionsergebnisse.
-        yolo_model (YOLO): Das YOLO-Modell, das für die Detektion verwendet wird.
-        detection_labels (list): Labels, die detektiert werden sollen.
-
-    Rückgabe:
-        tuple: Anzahl der detektierten Boxen und Liste der Box-Daten.
     """
     detected_boxes = 0
     detections = yolo_result[0]
@@ -66,8 +35,8 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
         class_id = int(box.cls[0])
         label = yolo_model.names[class_id]
         confidence = box.conf[0]
-        # Berücksichtige nur Bounding-Boxen mit Confidence > 0.6 für die relevanten Labels
-        if confidence > 0.5 and label in detection_labels:
+        # Berücksichtige nur Bounding-Boxen mit Confidence > 0.5 für die relevanten Labels
+        if confidence > 0.4 and label in detection_labels:
             detected_boxes += 1
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             confidence = box.conf[0]
@@ -89,9 +58,6 @@ def draw_yolo_detections(frame, yolo_result, yolo_model, detection_labels):
 def generate_unique_color():
     """
     Generiert eine eindeutige Farbe für jedes Objekt.
-
-    Rückgabe:
-        np.ndarray: Ein Array, das eine Farbe im RGB-Format repräsentiert.
     """
     return np.array([random.randint(0, 255), random.randint(
         0, 255), random.randint(0, 255)], dtype=np.uint8)
@@ -99,12 +65,6 @@ def generate_unique_color():
 def mask_to_rle(mask):
     """
     Konvertiert eine Maske in das RLE-Format.
-
-    Argumente:
-        mask (np.ndarray): Die zu konvertierende Maske.
-
-    Rückgabe:
-        str: Der RLE-String.
     """
     rle = mask_util.encode(np.asfortranarray(mask.astype(np.uint8)))
     return rle
@@ -112,14 +72,6 @@ def mask_to_rle(mask):
 def save_image(image_np, path, filename):
     """
     Speichert das verarbeitete Bild im angegebenen Pfad.
-
-    Argumente:
-        image_np (np.ndarray): Das Bild-Array.
-        path (str): Der Verzeichnispfad zum Speichern des Bildes.
-        filename (str): Der Dateiname für das Bild.
-
-    Rückgabe:
-        str: Der vollständige Pfad zum gespeicherten Bild.
     """
     if not os.path.exists(path):
         os.makedirs(path)
@@ -127,116 +79,68 @@ def save_image(image_np, path, filename):
     cv2.imwrite(image_path, image_np)  # Speichere das Bild
     return image_path
 
-def apply_sam_segmentation(frame, predictor, boxes_data):
+def apply_yolo_segmentation(frame, yolo_model, boxes_data):
     """
-    Wendet die SAM-Segmentierung auf die Bounding-Boxen an, indem positive und negative Punkte verwendet werden.
-
-    Argumente:
-        frame (np.ndarray): Das Originalbild.
-        predictor (SamPredictor): Das SAM-Predictor-Objekt.
-        boxes_data (list): Liste der Bounding-Box-Daten.
-
-    Rückgabe:
-        list: Liste der gezeichneten Masken mit Scores und Labels.
+    Wendet die YOLOv8-Segmentierung auf die Bounding-Boxen an.
     """
     drawn_masks = []
-    predictor.set_image(frame)
     image_height, image_width = frame.shape[:2]
 
     for box in boxes_data:
         x1, y1, x2, y2 = box['x1'], box['y1'], box['x2'], box['y2']
-        input_box = np.array([x1, y1, x2, y2])
 
-        # Positive Punkte
-        positive_points = np.array([
-           # [x1 + (x2 - x1) * 0.5, y1 + (y2 - y1) * 0.6],    # Mittlerer Punkt
-            [x1 + (x2 - x1) * 0.5, y1 + (y2 - y1) * 0.85],   # Unterer mittlerer Bereich
-            [x1 + (x2 - x1) * 0.7, y1 + (y2 - y1) * 0.85],   # Unterer rechter Bereich
-        ])
+        # Sicherstellen, dass die Koordinaten innerhalb der Bildgrenzen liegen
+        x1 = max(0, x1)
+        y1 = max(0, y1)
+        x2 = min(image_width, x2)
+        y2 = min(image_height, y2)
 
-        # Negative Punkte
-        neg_x = x1 + (x2 - x1) * 0.5
-        neg_y = y1 - (y2 - y1) * 0.1
-        neg_y2 = y1 + (y2 - y1) * 0.05
-        neg_x2 = x1 + (x2 - x1) * 0.05
-        neg_x3 =x1 + (x2 - x1) * 0.35
-        neg_y3 =  y1 + (y2 - y1) * 0.2
-        neg_x4 =x1 + (x2 - x1) * 0.75
-        neg_y4 = y1 + (y2 - y1) * 0.2
-        neg_x5 =x1 + (x2 - x1) * 0.9
-        neg_y5 =  y1 + (y2 - y1) * 0.15
-        neg_x6 =x1 + (x2 - x1) * 0.1
-        neg_y6 =  y1 + (y2 - y1) * 0.15
+        cropped_frame = frame[y1:y2, x1:x2]
+        cropped_height, cropped_width = cropped_frame.shape[:2]
 
-        # Prüfen und Anpassen der negativen Punkte, um sicherzustellen, dass sie innerhalb des Bildes liegen
-        if neg_y < 0:
-            neg_y = y2 + (y2 - y1) * 0.1
-            if neg_y > image_height - 1:
-                neg_y = image_height - 1
+        if cropped_height == 0 or cropped_width == 0:
+            logger.warning("Ungültige Dimensionen des ausgeschnittenen Bereichs.")
+            continue
 
-        if neg_x2 < 0:
-            neg_x2 = 0
+        # Führen Sie die Segmentierung mit YOLOv8 auf dem ausgeschnittenen Bereich durch
+        yolo_result = yolo_model.predict(cropped_frame, task='segment')
 
-        negative_points = np.array([
-            [neg_x, neg_y],
-            [neg_x2, neg_y2],
-            [neg_x3, neg_y3],
-            [neg_x4, neg_y4],
-            [neg_x5, neg_y5],
-            [neg_x6, neg_y6]
+        # Überprüfen Sie, ob eine Maske erkannt wurde
+        detections = yolo_result[0]
+        if detections.masks is None or len(detections.masks.data) == 0:
+            continue  # Keine Maske erkannt
 
-        ])
+        # Nehmen Sie die erste erkannte Maske
+        mask = detections.masks.data[0].cpu().numpy()
 
-        # Kombiniere die Punkte
-        point_coords = np.vstack([positive_points, negative_points])
-        point_labels = np.array([1] * len(positive_points) + [0] * len(negative_points))
+        # Skalieren Sie die Maske auf die Größe des ausgeschnittenen Bereichs
+        mask_resized = cv2.resize(mask, (cropped_width, cropped_height), interpolation=cv2.INTER_NEAREST)
+        mask_resized = mask_resized.astype(bool)
 
-        # Generiere die Maske mit SAM
-        masks, scores, logits = predictor.predict(
-            point_coords=point_coords,
-            point_labels=point_labels,
-            box=input_box[None, :],
-            multimask_output=False
-        )
+        # Platzieren Sie die skalierte Maske in der Gesamtmaske
+        full_mask = np.zeros((image_height, image_width), dtype=bool)
+        full_mask[y1:y2, x1:x2] = mask_resized
 
-        mask = masks[0]
-        score = scores[0]
-
-        # Zeichnen Sie die Maske auf das Bild
+        # Zeichnen Sie die Maske auf das Originalbild
         color = generate_unique_color()
-        mask_bool = mask.astype(bool)
-        frame[mask_bool] = (frame[mask_bool] * 0.5 + color * 0.5).astype(np.uint8)
+        frame[full_mask] = (frame[full_mask] * 0.5 + color * 0.5).astype(np.uint8)
 
-        drawn_masks.append((score, box['label'], mask_bool))
+        # Fügen Sie die Maske zu den gezeichneten Masken hinzu
+        drawn_masks.append((box['confidence'], box['label'], full_mask))
 
-        logger.info(f"Maske hinzugefügt für {box['label']} mit SAM-Score {score:.2f}")
+        logger.info(f"Maske hinzugefügt für {box['label']} mit YOLO-Segmentierung")
 
     return drawn_masks
 
-def process_image(image, yolo_model, sam_predictor, detection_labels, photo_label,
-                  process_id):
+def process_image(image, yolo_model, detection_labels, photo_label, process_id):
     """
     Verarbeitet ein einzelnes Bild für Detektion, Segmentierung und Klassifikation.
-
-    Argumente:
-        image (PIL.Image): Das zu verarbeitende Bild.
-        yolo_model (YOLO): Das YOLO-Modell für die Objektdetektion.
-        sam_predictor (SamPredictor): Der SAM-Predictor.
-        detection_labels (list): Zu detektierende Labels.
-        url (str): URL des Bildes.
-        photo_label (str): Label des Fotos.
-        taking_time (str): Zeitpunkt der Aufnahme des Fotos.
-        process_id (int): Prozess-ID zur Verfolgung.
-        confidence_threshold (float): Confidence-Schwelle für Detektionen.
-
-    Rückgabe:
-        tuple: XML-Element mit Metadaten und Pfad zum gespeicherten Bild.
     """
     image_np = np.array(image)
     width, height = image.size
 
-    # Führe YOLO-Detektion durch
-    yolo_result = yolo_model.predict(image_np)
+    # Führe YOLO-Detektion und Segmentierung durch
+    yolo_result = yolo_model.predict(image_np, task='segment')
 
     # Zeichne YOLO-Detektionen und sammle die Bounding-Box-Daten
     detected_boxes, boxes_data = draw_yolo_detections(
@@ -246,9 +150,9 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, photo_labe
         logger.warning("Keine Objekte in YOLO-Detektion gefunden.")
         return None, None
 
-    # Wende SAM-Segmentierung auf die Bounding-Boxen an
-    drawn_masks = apply_sam_segmentation(
-        image_np, sam_predictor, boxes_data)
+    # Wende YOLO-Segmentierung auf die Bounding-Boxen an
+    drawn_masks = apply_yolo_segmentation(
+        image_np, yolo_model, boxes_data)
 
     # Speichere das verarbeitete Bild
     image_path = save_image(image_np, "output1",
@@ -268,30 +172,19 @@ def process_image(image, yolo_model, sam_predictor, detection_labels, photo_labe
         box_element.set("y2", str(box['y2']))
 
     # Speichere die gezeichneten Masken im XML
-    for score, label, mask in drawn_masks:
+    for confidence, label, mask in drawn_masks:
         rle = mask_to_rle(mask)  # Konvertiere die Maske in RLE
         mask_element = ET.SubElement(
-            image_metadata, "mask", label=label, source="SAM")
+            image_metadata, "mask", label=label, source="YOLOv8")
         rle_str = ', '.join(str(count) for count in rle["counts"])
         mask_element.set("rle", rle_str)
-    """"
-        cv2.imshow(f"Verarbeitetes Bild: {photo_label}", image_np)
-        cv2.waitKey(0)  # Warte auf Tastendruck zum Schließen des Fensters
-        cv2.destroyAllWindows()  # Schließe das Fenster
-    """
+        mask_element.set("confidence", f"{confidence:.2f}")
+
     return image_metadata, image_path
 
 def classify_image(image, model_classification, device):
     """
     Klassifiziert ein Bild mit dem gegebenen Klassifikationsmodell.
-
-    Argumente:
-        image (PIL.Image): Das zu klassifizierende Bild.
-        model_classification (nn.Module): Das Klassifikationsmodell.
-        device (torch.device): Das verwendete Gerät (CPU oder GPU).
-
-    Rückgabe:
-        int: Die vorhergesagte Klassen-ID.
     """
     # Definieren der Transformationen
     transform = transforms.Compose([
@@ -310,21 +203,9 @@ def classify_image(image, model_classification, device):
 
     return preds.item()
 
-
-def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detection_labels, model_classification, device):
+def scrape_and_process_ship_images(process_id, yolo_model, detection_labels, model_classification, device):
     """
     Scrapt Bilder von ShipSpotting.com und verarbeitet sie.
-
-    Argumente:
-        process_id (int): Die ID des zu verarbeitenden Bildes.
-        yolo_model (YOLO): Das YOLO-Modell für die Objektdetektion.
-        sam_predictor (SamPredictor): Der SAM-Predictor.
-        detection_labels (list): Zu detektierende Labels.
-        model_classification (nn.Module): Das Klassifikationsmodell.
-        device (torch.device): Das verwendete Gerät (CPU oder GPU).
-
-    Rückgabe:
-        tuple: XML-Daten und Pfad zum verarbeiteten Bild.
     """
     url_prefix = 'https://www.shipspotting.com/photos/'
     url = f"{url_prefix}{str(process_id).zfill(7)}"
@@ -358,9 +239,9 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
         image_response = session.get(image_url, headers=headers)
         image = Image.open(io.BytesIO(image_response.content)).convert("RGB")
         label_pred = map_number_to_ship(classify_image(image, model_classification, device))
-        logger.info(f"Schiffkategory ist : {label_pred}")
+        logger.info(f"Schiffkategorie ist : {label_pred}")
 
-        xml_data, image_path = process_image(image, yolo_model, sam_predictor, detection_labels,
+        xml_data, image_path = process_image(image, yolo_model, detection_labels,
                                              label_pred, process_id)
 
         # Freigeben ungenutzter Variablen
@@ -376,14 +257,6 @@ def scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detect
 def save_xml(xml_data, file_name="output1.xml", path=""):
     """
     Speichert XML-Daten mit Detektions-, Segmentierungs- und Klassifikationsdaten.
-
-    Argumente:
-        xml_data (ET.Element): Die zu speichernden XML-Daten.
-        file_name (str): Der Dateiname für die XML-Datei.
-        path (str): Der Verzeichnispfad zum Speichern der XML-Datei.
-
-    Rückgabe:
-        str: Der vollständige Pfad zur gespeicherten XML-Datei.
     """
     # Wenn der Pfad nicht leer ist, stelle sicher, dass das Verzeichnis existiert
     if path:
@@ -400,22 +273,11 @@ def save_xml(xml_data, file_name="output1.xml", path=""):
     tree.write(file_path)
     return file_path
 
-def process_single_image(process_id, yolo_model, sam_predictor, detection_labels, model_classification, device):
+def process_single_image(process_id, yolo_model, detection_labels, model_classification, device):
     """
-    Wrapper function to process a single image by its process_id. Used in multiprocessing.
-
-    Args:
-        process_id (int): The process ID of the image to scrape and process.
-        yolo_model (YOLO): The YOLO object detection model.
-        sam_predictor (SamPredictor): The SAM predictor model.
-        detection_labels (list): List of detection labels for YOLO.
-        model_classification (nn.Module): The classification model.
-        device (torch.device): The device (CPU/GPU).
-
-    Returns:
-        tuple: XML data and path to the processed image.
+    Wrapper-Funktion zum Verarbeiten eines einzelnen Bildes anhand seiner process_id. Wird in Multiprocessing verwendet.
     """
-    return scrape_and_process_ship_images(process_id, yolo_model, sam_predictor, detection_labels, model_classification, device)
+    return scrape_and_process_ship_images(process_id, yolo_model, detection_labels, model_classification, device)
 
 def main():
     """
@@ -424,8 +286,8 @@ def main():
     # Definieren Sie das Gerät
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Lade das YOLO-Modell und verschiebe es auf das entsprechende Gerät
-    yolo_model = YOLO("/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/boat_detection_yolo_model_new6/weights/best.pt")
+    # Lade das YOLOv8-Segmentierungsmodell und verschiebe es auf das entsprechende Gerät
+    yolo_model = YOLO("yolov8n-seg.pt")  # Verwenden Sie Ihr trainiertes Modell oder ein vortrainiertes Modell
     yolo_model.to(device)
 
     # Instanziiere das Klassifikationsmodell
@@ -441,23 +303,21 @@ def main():
     model_classification.to(device)
     model_classification.eval()  # Setzt das Modell in den Evaluationsmodus
 
-    # Initialisiere das SAM-Modell
-    sam_predictor = setup_sam_model()
     detection_labels = ["boat"]
 
-    # Define the list of process IDs (e.g., a list of ship spotting image IDs)
-    process_ids = [126844,186844,96844,47844]  # Example of multiple IDs
+    # Definieren Sie die Liste der process_ids (z.B. eine Liste von ShipSpotting-Bild-IDs)
+    process_ids = [126844,186844,96844,47844]  # Beispiel für mehrere IDs
 
-    # Use a multiprocessing pool to process the images in parallel
+    # Verwenden Sie einen Multiprocessing-Pool, um die Bilder parallel zu verarbeiten
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
 
-    # Create a partial function that passes the static arguments to the multiprocessing worker
-    args = [(process_id, yolo_model, sam_predictor, detection_labels, model_classification, device) for process_id in process_ids]
+    # Erstellen Sie eine Argumentliste für die Multiprocessing-Worker
+    args = [(process_id, yolo_model, detection_labels, model_classification, device) for process_id in process_ids]
 
-    # Run the processing in parallel
+    # Führen Sie die Verarbeitung parallel aus
     results = pool.starmap(process_single_image, args)
 
-    # Save results
+    # Ergebnisse speichern
     for xml_data, image_path in results:
         if xml_data:
             process_id = xml_data.attrib['id']

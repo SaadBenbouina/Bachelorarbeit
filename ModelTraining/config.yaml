@@ -1,7 +1,12 @@
 # Paths to the data
-path: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo
-train: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
-val: /Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
+path: /Users/saadbenboujina/Downloads/seg.v2i.yolov8
+
+#/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo
+train: /Users/saadbenboujina/Downloads/seg.v2i.yolov8/train
+#/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
+val: /Users/saadbenboujina/Downloads/seg.v2i.yolov8/train
+
+#/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
 
 nc: 1
 # Main categories
