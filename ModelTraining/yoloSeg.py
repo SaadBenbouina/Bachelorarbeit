@@ -1,12 +1,12 @@
 from ultralytics import YOLO
 
 # Laden Sie das YOLOv8-Segmentierungsmodell
-model = YOLO('yolov8n-seg.pt')  # Sie können auch 'yolov8s-seg.pt' oder ein anderes Modell verwenden
+model = YOLO('/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/newData/weights/best.pt')  # Sie können auch 'yolov8s-seg.pt' oder ein anderes Modell verwenden
 
 # Training starten
 model.train(
     data='config.yaml',
-    epochs=2,         # Anzahl der Epochen
+    epochs=50,         # Anzahl der Epochen
     imgsz=640,         # Bildgröße
     batch=16,          # Batch-Größe
     name='boat_segmentation',

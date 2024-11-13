@@ -287,7 +287,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Lade das YOLOv8-Segmentierungsmodell und verschiebe es auf das entsprechende Gerät
-    yolo_model = YOLO("yolov8n-seg.pt")  # Verwenden Sie Ihr trainiertes Modell oder ein vortrainiertes Modell
+    yolo_model = YOLO("/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/boat_segmentation/weights/best.pt")  # Verwenden Sie Ihr trainiertes Modell oder ein vortrainiertes Modell
     yolo_model.to(device)
 
     # Instanziiere das Klassifikationsmodell
@@ -306,7 +306,7 @@ def main():
     detection_labels = ["boat"]
 
     # Definieren Sie die Liste der process_ids (z.B. eine Liste von ShipSpotting-Bild-IDs)
-    process_ids = [126844,186844,96844,47844]  # Beispiel für mehrere IDs
+    process_ids = [76844, 96844, 126744, 154644, 154859, 933373, 954856, 954873, 1235145, 186844]  # Beispiel für mehrere IDs
 
     # Verwenden Sie einen Multiprocessing-Pool, um die Bilder parallel zu verarbeiten
     pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
