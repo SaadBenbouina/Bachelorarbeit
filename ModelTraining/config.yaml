@@ -1,12 +1,10 @@
 # Paths to the data
-path: /Users/saadbenboujina/Downloads/seg.v9i.yolov8
+path: /private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/ModelTraining
 
 #/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo
-train: /Users/saadbenboujina/Downloads/seg.v9i.yolov8/train
+train: /private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/ModelTraining/data2
 #/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
-val: /Users/saadbenboujina/Downloads/seg.v9i.yolov8/valid
-
-test: /Users/saadbenboujina/Downloads/seg.v9i.yolov8/valid
+val: /private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/ModelTraining/val2
 
 #/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
 

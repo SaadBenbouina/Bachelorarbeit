@@ -49,7 +49,7 @@ def process_image(image, yolo_model, detection_labels, model_classification, dev
         label = yolo_model.names[class_id]
         confidence = box.conf[0]
 
-        if confidence > 0.45 and label in detection_labels:
+        if confidence > 0.5 and label in detection_labels:
             detected_boxes += 1
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             cropped_image = image.crop((x1, y1, x2, y2))
@@ -81,7 +81,7 @@ def process_image(image, yolo_model, detection_labels, model_classification, dev
         return None, None
 
     # Speichere das verarbeitete Bild und die XML-Daten
-    image_path = save_image(image_np, "output2", f"{process_id}_processed.jpg")
+    image_path = save_image(image_np, "output32", f"{process_id}_processed.jpg")
     image_metadata = ET.Element("image", id=str(process_id), width=str(width), height=str(height))
 
     for box in boxes_data:
@@ -116,7 +116,7 @@ def classify_image(image, model_classification, device):
 
     return preds.item()
 
-def save_xml(xml_data, file_name="output2.xml", path=""):
+def save_xml(xml_data, file_name="output32.xml", path=""):
     if path:
         if not os.path.exists(path):
             os.makedirs(path)
@@ -146,7 +146,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Verwende Gerät: {device}")
 
-    yolo_model = YOLO('yolov8x-seg.pt')
+    yolo_model = YOLO('/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/boat_segmentation/weights/best.pt')
     # Überprüfen Sie, ob YOLO das Gerät setzen kann
     if hasattr(yolo_model, 'to'):
         yolo_model.to(device)
@@ -172,15 +172,15 @@ def main():
 
     detection_labels = ["boat"]
     process_ids = [
-        88064, 36865, 24590
+10567,10678,11987,12345,18987,19567,20023,21987,22234,23234,23345,24234,24567,24987
     ]
 
     for process_id in process_ids:
         logger.info(f"Verarbeite process_id: {process_id}")
         xml_data, image_path = process_single_image(process_id, yolo_model, detection_labels, model_classification, device)
         if xml_data:
-            save_xml(xml_data, f"{process_id}_processed.xml", "output2")
-            logger.info(f"Ergebnis gespeichert unter: output2/{process_id}_processed.xml")
+            save_xml(xml_data, f"{process_id}_processed.xml", "output32")
+            logger.info(f"Ergebnis gespeichert unter: output32/{process_id}_processed.xml")
         else:
             logger.warning(f"Keine Daten zum Speichern für process_id: {process_id}")
 
