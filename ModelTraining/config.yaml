@@ -1,10 +1,10 @@
 # Paths to the data
-path: /Users/saadbenboujina/Downloads/newone.v1i.yolov8
+path: /Users/saadbenboujina/Downloads/seg.v9i.yolov8 (1)
 
 #/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo
-train: /Users/saadbenboujina/Downloads/newone.v1i.yolov8/train
+train: /Users/saadbenboujina/Downloads/seg.v9i.yolov8 (1)/train
 #/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/train
-val: /Users/saadbenboujina/Downloads/newone.v1i.yolov8/valid
+val: /Users/saadbenboujina/Downloads/seg.v9i.yolov8 (1)/valid
 
 #/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/TrainDataYolo/val
 
