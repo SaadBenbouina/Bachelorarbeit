@@ -112,7 +112,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Verwende Gerät: {device}")
 
-    yolo_model = YOLO('/Users/saadbenboujina/Downloads/optuna_trial_33/weights/best.pt')
+    yolo_model = YOLO('/Users/saadbenboujina/Downloads/optuna_trial_2/weights/best.pt')
     # Überprüfen Sie, ob YOLO das Gerät setzen kann
     if hasattr(yolo_model, 'to'):
         yolo_model.to(device)
@@ -138,7 +138,7 @@ def main():
 
     detection_labels = ["boat"]
     process_ids = [
-        32345, 34456, 1064456
+        6178
     ]
 
     for process_id in process_ids:

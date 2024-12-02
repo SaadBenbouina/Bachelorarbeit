@@ -16,21 +16,21 @@ class ShipLabelFilter:
         """
         label = label.lower().replace(" ", "_")
         if 'overview' in label:
-            label = None
+            label = "unkown"
         if 'wheelhouse' in label:
-            label = None
+            label = "unkown"
         if 'deck' in label:
-            label = None
+            label = "unkown"
         if 'museum' in label:
-            label = None
+            label = "unkown"
         if 'arma' in label:
-            label = None
+            label = "unkown"
         if 'interior' in label:
-            label = None
+            label = "unkown"
         if 'crests' in label:
-            label = None
+            label = "unkown"
         if label is None:
-            return label
+            return "unkown"
 
         if 'livestock' in label:
             label = 'cargo_ship'
