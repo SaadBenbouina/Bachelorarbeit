@@ -253,8 +253,8 @@ def process_image_with_yolo(image_path, category, output_base_dir='processed_boa
         logger.error(f"Error processing image {image_path} with YOLO: {e}")
 
 def main():
-    start_id = 4290
-    end_id = 4937
+    start_id = 1644290
+    end_id = 1645337
     download_folder = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/RawData"
     processed_boats_dir = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ForCategory/train"
 
