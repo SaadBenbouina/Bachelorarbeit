@@ -48,8 +48,8 @@ class ShipLabelFilter:
             label = 'work_boat'
         if 'casult' in label:
             label = 'maintenance'
-        if 'buoy' in label:
-            label = 'buoy'
+        if 'maintenance' in label:
+            label = 'maitenance'
         if 'battle' in label:
             label = 'military'
         if 'auxiliar' in label:
@@ -130,20 +130,6 @@ class ShipLabelFilter:
             label = 'ferry'
         if 'storm' in label:
             label = 'fishing_ship'
-        if 'research' in label:
-            label = 'special_ship'
-        if 'special' in label:
-            label = 'special_ship'
-        if 'mystery' in label:
-            label = 'sailing_ship'
-        if 'training' in label:
-            label = 'special_ship'
-        if 'support' in label:
-            label = 'special_ship'
-        if 'heavy' in label:
-            label = 'special_ship'
-        if 'cable' in label:
-            label = 'special_ship'
         if 'coast_guard' in label:
             label = 'order'
         if 'police' in label:
@@ -154,12 +140,8 @@ class ShipLabelFilter:
             label = 'order'
         if 'vehicle' in label:
             label = 'cargo_ship'
-        if 'ice' in label:
-            label = 'special_ship'
         if 'ore' in label:
             label = 'cargo_ship'
-        if 'test' in label:
-            label = 'special_ship'
         if 'whale' in label:
             label = 'fishing_ship'
         if 'museum' in label:
