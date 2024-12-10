@@ -1,15 +1,18 @@
 import torch
 import torch.nn as nn
-import multiprocessing
 from torch.utils.data import DataLoader
 from torchvision import datasets, models, transforms
 import os
 import copy
-import time
 import logging
+import optuna
 from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
 from tqdm import tqdm
+
+# Logging konfigurieren
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Setze den Zufallssamen für Reproduzierbarkeit
 def set_seed(seed=42):
@@ -21,12 +24,6 @@ def set_seed(seed=42):
 # Early Stopping Klasse
 class EarlyStopping:
     def __init__(self, patience=7, verbose=False, delta=0):
-        """
-        Args:
-            patience (int): Wie viele Epochen ohne Verbesserung gewartet werden soll.
-            verbose (bool): Wenn True, gibt es Meldungen bei Verbesserungen.
-            delta (float): Mindestverbesserung, um als Verbesserung zu gelten.
-        """
         self.patience = patience
         self.verbose = verbose
         self.delta = delta
@@ -37,16 +34,15 @@ class EarlyStopping:
 
     def __call__(self, val_loss):
         score = -val_loss
-
         if self.best_score is None:
             self.best_score = score
             self.best_loss = val_loss
             if self.verbose:
-                print(f'Initiales Bestes Verlust: {self.best_loss:.4f}')
+                logger.info(f'Initiales Bestes Verlust: {self.best_loss:.4f}')
         elif score < self.best_score + self.delta:
             self.counter += 1
             if self.verbose:
-                print(f'EarlyStopping counter: {self.counter} out of {self.patience}')
+                logger.info(f'EarlyStopping counter: {self.counter} out of {self.patience}')
             if self.counter >= self.patience:
                 self.early_stop = True
         else:
@@ -54,207 +50,162 @@ class EarlyStopping:
             self.best_loss = val_loss
             self.counter = 0
             if self.verbose:
-                print(f'Verbesserter Verlust: {self.best_loss:.4f}')
+                logger.info(f'Verbesserter Verlust: {self.best_loss:.4f}')
 
-def main():
-    # Setze den Zufallssamen
+def objective(trial):
     set_seed(42)
 
-    # Konfigurieren Sie das Logging
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-    logger = logging.getLogger(__name__)
+    # Hyperparameter optimieren
+    batch_size = trial.suggest_int("batch_size", 16, 64, step=16)
+    learning_rate = trial.suggest_float("lr", 1e-5, 1e-3, log=True)
+    patience = trial.suggest_int("patience", 5, 15)
+
+    # Start Logging für diesen Trial
+    logger.info(f"Starte Trial {trial.number} mit batch_size={batch_size}, lr={learning_rate}, patience={patience}")
 
     # Datenverzeichnis
-    data_dir = '/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/ForCategory'
+    data_dir = '/content/drive/MyDrive/crypto/ForCategory'
 
-    # Datenvorbereitung mit Datenaugmentation für das Training
+    # Datenvorbereitung
     data_transforms = {
         'train': transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.RandomHorizontalFlip(),
             transforms.RandomRotation(15),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [
-                0.229, 0.224, 0.225])
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ]),
         'val': transforms.Compose([
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [
-                0.229, 0.224, 0.225])
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ]),
     }
 
-    # Überprüfen Sie, ob die Unterverzeichnisse 'train' und 'val' existieren
-    for phase in ['train', 'val']:
-        path = os.path.join(data_dir, phase)
-        if not os.path.isdir(path):
-            logger.error(f"Verzeichnis für Phase '{phase}' nicht gefunden: {path}")
-            raise FileNotFoundError(f"Verzeichnis für Phase '{phase}' nicht gefunden: {path}")
-
-    # Laden der Datensätze
-    image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x),
-                                              data_transforms[x])
+    # Daten laden
+    image_datasets = {x: datasets.ImageFolder(os.path.join(data_dir, x), data_transforms[x])
                       for x in ['train', 'val']}
-    num_classes = len(image_datasets['train'].classes)
-    class_names = image_datasets['train'].classes
-
-    # Bestimmen der Anzahl der Arbeiter für DataLoader
-    num_workers = multiprocessing.cpu_count() if os.name != 'nt' else 0
-    dataloaders = {x: DataLoader(
-        image_datasets[x], batch_size=32, shuffle=True if x == 'train' else False, num_workers=num_workers, pin_memory=True)
-        for x in ['train', 'val']}
-
     dataset_sizes = {x: len(image_datasets[x]) for x in ['train', 'val']}
+    dataloaders = {x: DataLoader(image_datasets[x], batch_size=batch_size, shuffle=(x == 'train'))
+                   for x in ['train', 'val']}
 
-    # Logging der Dateninformationen
-    logger.info(f"Klassen: {class_names}")
-    logger.info(f"Trainingsgröße: {dataset_sizes['train']}")
-    logger.info(f"Validierungsgröße: {dataset_sizes['val']}")
+    num_classes = len(image_datasets['train'].classes)
+    logger.info(f"Anzahl Klassen: {num_classes}, Klassen: {image_datasets['train'].classes}")
+    logger.info(f"Trainingsgröße: {dataset_sizes['train']}, Validierungsgröße: {dataset_sizes['val']}")
 
-    # Bestimmen des Geräts
+    # Gerät festlegen
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     logger.info(f"Verwendetes Gerät: {device}")
 
-    # Berechnung der Klassen-Gewichte zur Handhabung von Klassenungleichgewichten
+    # Klassen-Gewichte
     train_labels = image_datasets['train'].targets
     class_weights = compute_class_weight('balanced', classes=np.arange(num_classes), y=train_labels)
     class_weights = torch.tensor(class_weights, dtype=torch.float).to(device)
     logger.info(f"Klassen-Gewichte: {class_weights}")
 
-    # Modell laden und anpassen
-    model_ft = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)  # Aktualisiert auf 'weights'
+    # Modell laden und konfigurieren
+    model_ft = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)
     num_ftrs = model_ft.fc.in_features
-    model_ft.fc = nn.Linear(num_ftrs, num_classes)  # Anzahl der Schiffskategorien
+    model_ft.fc = nn.Linear(num_ftrs, num_classes)
 
-    # Feinabstimmung: Nur bestimmte Schichten trainieren
+    # Schichten einfrieren/auftauen
     for param in model_ft.parameters():
-        param.requires_grad = False  # Alle Schichten einfrieren
-
-    # Letzte Blockschichten freigeben (zum Beispiel layer4)
+        param.requires_grad = False
     for param in model_ft.layer4.parameters():
         param.requires_grad = True
-
-    # Letzte vollständig verbundene Schicht trainieren
     for param in model_ft.fc.parameters():
         param.requires_grad = True
 
     model_ft = model_ft.to(device)
 
-    # Verlustfunktion mit Klassen-Gewichten
+    # Verlustfunktion, Optimierer, Scheduler
     loss_fn = nn.CrossEntropyLoss(weight=class_weights)
+    optimizer_ft = torch.optim.Adam(filter(lambda p: p.requires_grad, model_ft.parameters()), lr=learning_rate)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer_ft, mode='min', factor=0.1, patience=3)
 
-    # Optimierer: Nur die Parameter mit requires_grad=True optimieren
-    optimizer_ft = torch.optim.Adam(filter(lambda p: p.requires_grad, model_ft.parameters()), lr=0.001)
+    # Early Stopping
+    early_stopping = EarlyStopping(patience=patience, verbose=True)
 
-    # Scheduler für Lernrate
-    exp_lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer_ft, step_size=7, gamma=0.1)
+    # Training
+    best_acc = 0.0
+    best_model_wts = copy.deepcopy(model_ft.state_dict())
+    num_epochs = 25
+    logger.info(f"Starte Training für {num_epochs} Epochen")
 
-    # Verzeichnis für gespeicherte Checkpoints
-    checkpoint_dir = 'checkpoints'
-    os.makedirs(checkpoint_dir, exist_ok=True)
+    for epoch in range(num_epochs):
+        logger.info(f'Epoch {epoch+1}/{num_epochs}')
+        logger.info('-' * 10)
 
-    # Training und Validierung
-    def train_model(model, loss_function, optimizer, scheduler, num_epochs=25, save_interval=2):
-        since = time.time()
+        for phase in ['train', 'val']:
+            if phase == 'train':
+                model_ft.train()
+                logger.info("Train-Phase gestartet")
+            else:
+                model_ft.eval()
+                logger.info("Val-Phase gestartet")
 
-        best_model_wts = copy.deepcopy(model.state_dict())
-        best_acc = 0.0
+            running_loss = 0.0
+            running_corrects = 0
 
-        # Early Stopping initialisieren
-        early_stopping = EarlyStopping(patience=10, verbose=True)
+            for inputs, labels in tqdm(dataloaders[phase], desc=f"{phase.capitalize()}-Phase"):
+                inputs, labels = inputs.to(device), labels.to(device)
 
-        for epoch in range(num_epochs):
-            logger.info(f'Epoch {epoch+1}/{num_epochs}')
-            logger.info('-' * 10)
+                with torch.set_grad_enabled(phase == 'train'):
+                    outputs = model_ft(inputs)
+                    _, preds = torch.max(outputs, 1)
+                    loss = loss_fn(outputs, labels)
 
-            # Jede Epoche hat ein Training und eine Validierung
-            for current_phase in ['train', 'val']:  # 'phase' zu 'current_phase' geändert
-                if current_phase == 'train':
-                    model.train()  # Trainingsmodus
-                else:
-                    model.eval()   # Evaluationsmodus
+                    if phase == 'train':
+                        optimizer_ft.zero_grad()
+                        loss.backward()
+                        optimizer_ft.step()
 
-                running_loss = 0.0
-                running_corrects = 0
+                running_loss += loss.item() * inputs.size(0)
+                running_corrects += (preds == labels).sum().item()
 
-                # Iterieren über Daten mit Fortschrittsbalken
-                for inputs, labels in tqdm(dataloaders[current_phase], desc=f"{current_phase.capitalize()}-Phase"):
-                    inputs = inputs.to(device)
-                    labels = labels.to(device)
+            epoch_loss = running_loss / dataset_sizes[phase]
+            epoch_acc = running_corrects / dataset_sizes[phase]
+            logger.info(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
 
-                    # Vorwärts-Pass
-                    with torch.set_grad_enabled(current_phase == 'train'):
-                        outputs = model(inputs)
-                        _, preds = torch.max(outputs, 1)
-                        loss = loss_function(outputs, labels)
+            if phase == 'val':
+                scheduler.step(epoch_loss)
+                # Bestes Modell aktualisieren
+                if epoch_acc > best_acc:
+                    best_acc = epoch_acc
+                    best_model_wts = copy.deepcopy(model_ft.state_dict())
+                    # Verzeichnis für das beste Modell anlegen, falls nicht vorhanden
+                    best_model_dir = '/content/drive/MyDrive/optuna_results_category'
+                    os.makedirs(best_model_dir, exist_ok=True)
 
-                        # Rückwärts-Pass und Optimierung nur im Training
-                        if current_phase == 'train':
-                            optimizer.zero_grad()
-                            loss.backward()
-                            optimizer.step()
+                    model_save_path = os.path.join(best_model_dir, f'best_model_trial_{trial.number}.pth')
+                    torch.save(best_model_wts, model_save_path)
+                    logger.info(f"Bestes Modell gespeichert: {model_save_path}")
 
-                    # **Assert-Anweisungen **
-                    assert isinstance(preds, torch.Tensor), "preds ist kein Tensor"
-                    assert isinstance(labels, torch.Tensor), "labels ist kein Tensor"
+                # Early Stopping prüfen
+                early_stopping(epoch_loss)
+                if early_stopping.early_stop:
+                    logger.info("Early stopping aktiviert")
+                    model_ft.load_state_dict(best_model_wts)
+                    logger.info(f"Beende Training in Epoche {epoch+1} mit bester Accuracy: {best_acc:.4f}")
+                    return best_acc
 
-                    # Statistiken sammeln
-                    running_loss += loss.item() * inputs.size(0)
-                    running_corrects += (preds == labels).sum().item()
+    # Endgültiges Modell speichern
+    final_model_dir = '/content/drive/MyDrive/optuna_results'
+    os.makedirs(final_model_dir, exist_ok=True)
+    final_model_path = os.path.join(final_model_dir, f'final_model_trial_{trial.number}.pth')
+    torch.save(best_model_wts, final_model_path)
+    logger.info(f"Finales Modell gespeichert: {final_model_path}")
 
-                if current_phase == 'train':
-                    scheduler.step()
+    model_ft.load_state_dict(best_model_wts)
+    logger.info(f"Training abgeschlossen. Beste Accuracy: {best_acc:.4f}")
+    return best_acc
 
-                epoch_loss = running_loss / dataset_sizes[current_phase]
-                epoch_acc = running_corrects / dataset_sizes[current_phase]
+# Optuna-Studie starten
+logger.info("Starte Optuna-Studie")
+study = optuna.create_study(direction="maximize")
+study.optimize(objective, n_trials=10)
 
-                logger.info(f'{current_phase.capitalize()} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
-
-                # Validierungsphase: Early Stopping überwachen
-                if current_phase == 'val':
-                    early_stopping(epoch_loss)
-
-                    if epoch_acc > best_acc:
-                        best_acc = epoch_acc
-                        best_model_wts = copy.deepcopy(model.state_dict())
-
-                    if early_stopping.early_stop:
-                        logger.info("Early stopping aktiviert")
-                        model.load_state_dict(best_model_wts)
-                        return model
-
-            # Sicherheits-Checkpoint nach jedem `save_interval`-ten Epoch
-            if (epoch + 1) % save_interval == 0:
-                checkpoint_path = os.path.join(checkpoint_dir, f'checkpoint_epoch_{epoch+1}.pth')
-                torch.save({
-                    'epoch': epoch + 1,
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'scheduler_state_dict': scheduler.state_dict(),
-                    'best_acc': best_acc,
-                    'best_model_wts': best_model_wts,
-                    'class_weights': class_weights
-                }, checkpoint_path)
-                logger.info(f"Checkpoint gespeichert: {checkpoint_path}")
-
-            logger.info("")  # Leere Zeile zur Trennung der Epochen
-
-        time_elapsed = time.time() - since
-        logger.info(f'Training abgeschlossen in {time_elapsed // 60:.0f}m {time_elapsed % 60:.0f}s')
-        logger.info(f'Beste Validierungsgenauigkeit: {best_acc:.4f}')
-
-        # Beste Modellgewichte laden
-        model.load_state_dict(best_model_wts)
-        return model
-
-    # Starten des Trainings
-    model_ft = train_model(model_ft, loss_fn, optimizer_ft, exp_lr_scheduler, num_epochs=15, save_interval=2)
-
-    # Modell speichern (nur die Gewichte)
-    model_save_path = 'ship_classification_resnet50.pth'
-    torch.save(model_ft.state_dict(), model_save_path)
-    logger.info(f"Modell gespeichert als {model_save_path}")
-
-if __name__ == '__main__':
-    main()
+best_trial_number = study.best_trial.number
+logger.info(f"Beste Parameter: {study.best_params}")
+logger.info(f"Beste Validierungsgenauigkeit: {study.best_value}")
+logger.info(f"Beste Trial-Nummer: {best_trial_number}")
