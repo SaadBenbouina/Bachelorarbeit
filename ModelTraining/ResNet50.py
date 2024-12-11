@@ -9,6 +9,7 @@ import optuna
 from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
 from tqdm import tqdm
+import pandas as pd
 
 # Logging konfigurieren
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -62,6 +63,10 @@ def objective(trial):
 
     # Start Logging für diesen Trial
     logger.info(f"Starte Trial {trial.number} mit batch_size={batch_size}, lr={learning_rate}, patience={patience}")
+
+    # Verzeichnis für Ergebnisse dieses Trials anlegen
+    trial_results_dir = f'/content/drive/MyDrive/optuna_results/trial_{trial.number}'
+    os.makedirs(trial_results_dir, exist_ok=True)
 
     # Datenverzeichnis
     data_dir = '/content/drive/MyDrive/crypto/ForCategory'
@@ -126,6 +131,12 @@ def objective(trial):
     # Early Stopping
     early_stopping = EarlyStopping(patience=patience, verbose=True)
 
+    # Listen für Metriken
+    train_losses = []
+    train_accuracies = []
+    val_losses = []
+    val_accuracies = []
+
     # Training
     best_acc = 0.0
     best_model_wts = copy.deepcopy(model_ft.state_dict())
@@ -136,58 +147,61 @@ def objective(trial):
         logger.info(f'Epoch {epoch+1}/{num_epochs}')
         logger.info('-' * 10)
 
-        for phase in ['train', 'val']:
-            if phase == 'train':
-                model_ft.train()
-                logger.info("Train-Phase gestartet")
-            else:
-                model_ft.eval()
-                logger.info("Val-Phase gestartet")
+        # TRAIN-PHASE
+        model_ft.train()
+        running_loss = 0.0
+        running_corrects = 0
+        for inputs, labels in tqdm(dataloaders['train'], desc="Train-Phase"):
+            inputs, labels = inputs.to(device), labels.to(device)
+            optimizer_ft.zero_grad()
+            outputs = model_ft(inputs)
+            _, preds = torch.max(outputs, 1)
+            loss = loss_fn(outputs, labels)
+            loss.backward()
+            optimizer_ft.step()
+            running_loss += loss.item() * inputs.size(0)
+            running_corrects += (preds == labels).sum().item()
+        train_loss = running_loss / dataset_sizes['train']
+        train_acc = running_corrects / dataset_sizes['train']
+        train_losses.append(train_loss)
+        train_accuracies.append(train_acc)
+        logger.info(f'Train Loss: {train_loss:.4f} Acc: {train_acc:.4f}')
 
-            running_loss = 0.0
-            running_corrects = 0
-
-            for inputs, labels in tqdm(dataloaders[phase], desc=f"{phase.capitalize()}-Phase"):
+        # VALIDIERUNGSPHASE
+        model_ft.eval()
+        running_loss = 0.0
+        running_corrects = 0
+        with torch.no_grad():
+            for inputs, labels in tqdm(dataloaders['val'], desc="Val-Phase"):
                 inputs, labels = inputs.to(device), labels.to(device)
-
-                with torch.set_grad_enabled(phase == 'train'):
-                    outputs = model_ft(inputs)
-                    _, preds = torch.max(outputs, 1)
-                    loss = loss_fn(outputs, labels)
-
-                    if phase == 'train':
-                        optimizer_ft.zero_grad()
-                        loss.backward()
-                        optimizer_ft.step()
-
+                outputs = model_ft(inputs)
+                _, preds = torch.max(outputs, 1)
+                loss = loss_fn(outputs, labels)
                 running_loss += loss.item() * inputs.size(0)
                 running_corrects += (preds == labels).sum().item()
+        val_loss = running_loss / dataset_sizes['val']
+        val_acc = running_corrects / dataset_sizes['val']
+        val_losses.append(val_loss)
+        val_accuracies.append(val_acc)
+        logger.info(f'Val Loss: {val_loss:.4f} Acc: {val_acc:.4f}')
 
-            epoch_loss = running_loss / dataset_sizes[phase]
-            epoch_acc = running_corrects / dataset_sizes[phase]
-            logger.info(f'{phase.capitalize()} Loss: {epoch_loss:.4f} Acc: {epoch_acc:.4f}')
+        scheduler.step(val_loss)
 
-            if phase == 'val':
-                scheduler.step(epoch_loss)
-                # Bestes Modell aktualisieren
-                if epoch_acc > best_acc:
-                    best_acc = epoch_acc
-                    best_model_wts = copy.deepcopy(model_ft.state_dict())
-                    # Verzeichnis für das beste Modell anlegen, falls nicht vorhanden
-                    best_model_dir = '/content/drive/MyDrive/optuna_results_category'
-                    os.makedirs(best_model_dir, exist_ok=True)
+        # Bestes Modell aktualisieren
+        if val_acc > best_acc:
+            best_acc = val_acc
+            best_model_wts = copy.deepcopy(model_ft.state_dict())
+            model_save_path = os.path.join(trial_results_dir, f'best_model_trial_{trial.number}.pth')
+            torch.save(best_model_wts, model_save_path)
+            logger.info(f"Bestes Modell gespeichert: {model_save_path}")
 
-                    model_save_path = os.path.join(best_model_dir, f'best_model_trial_{trial.number}.pth')
-                    torch.save(best_model_wts, model_save_path)
-                    logger.info(f"Bestes Modell gespeichert: {model_save_path}")
-
-                # Early Stopping prüfen
-                early_stopping(epoch_loss)
-                if early_stopping.early_stop:
-                    logger.info("Early stopping aktiviert")
-                    model_ft.load_state_dict(best_model_wts)
-                    logger.info(f"Beende Training in Epoche {epoch+1} mit bester Accuracy: {best_acc:.4f}")
-                    return best_acc
+        # Early Stopping prüfen
+        early_stopping(val_loss)
+        if early_stopping.early_stop:
+            logger.info("Early stopping aktiviert")
+            model_ft.load_state_dict(best_model_wts)
+            logger.info(f"Beende Training in Epoche {epoch+1} mit bester Accuracy: {best_acc:.4f}")
+            break
 
     # Endgültiges Modell speichern
     final_model_dir = '/content/drive/MyDrive/optuna_results'
@@ -195,6 +209,18 @@ def objective(trial):
     final_model_path = os.path.join(final_model_dir, f'final_model_trial_{trial.number}.pth')
     torch.save(best_model_wts, final_model_path)
     logger.info(f"Finales Modell gespeichert: {final_model_path}")
+
+    # CSV mit Trainingsergebnissen speichern
+    results_df = pd.DataFrame({
+        'epoch': np.arange(1, len(train_losses)+1),
+        'train_loss': train_losses,
+        'train_acc': train_accuracies,
+        'val_loss': val_losses,
+        'val_acc': val_accuracies
+    })
+    results_csv_path = os.path.join(trial_results_dir, f'results_trial_{trial.number}.csv')
+    results_df.to_csv(results_csv_path, index=False)
+    logger.info(f"Ergebnisse als CSV gespeichert: {results_csv_path}")
 
     model_ft.load_state_dict(best_model_wts)
     logger.info(f"Training abgeschlossen. Beste Accuracy: {best_acc:.4f}")
