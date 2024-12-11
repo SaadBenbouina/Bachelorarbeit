@@ -7,9 +7,12 @@ import copy
 import logging
 import optuna
 from sklearn.utils.class_weight import compute_class_weight
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Logging konfigurieren
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -53,6 +56,20 @@ class EarlyStopping:
             if self.verbose:
                 logger.info(f'Verbesserter Verlust: {self.best_loss:.4f}')
 
+def plot_confusion_matrix(y_true, y_pred, classes, trial_results_dir, trial_number):
+    cm = confusion_matrix(y_true, y_pred)
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                xticklabels=classes, yticklabels=classes)
+    plt.ylabel('Tatsächliche Klasse')
+    plt.xlabel('Vorhergesagte Klasse')
+    plt.title('Verwechslungsmatrix')
+    plt.tight_layout()
+    cm_path = os.path.join(trial_results_dir, f'confusion_matrix_trial_{trial_number}.png')
+    plt.savefig(cm_path)
+    plt.close()
+    logger.info(f"Verwechslungsmatrix gespeichert: {cm_path}")
+
 def objective(trial):
     set_seed(42)
 
@@ -95,7 +112,8 @@ def objective(trial):
                    for x in ['train', 'val']}
 
     num_classes = len(image_datasets['train'].classes)
-    logger.info(f"Anzahl Klassen: {num_classes}, Klassen: {image_datasets['train'].classes}")
+    class_names = image_datasets['train'].classes
+    logger.info(f"Anzahl Klassen: {num_classes}, Klassen: {class_names}")
     logger.info(f"Trainingsgröße: {dataset_sizes['train']}, Validierungsgröße: {dataset_sizes['val']}")
 
     # Gerät festlegen
@@ -137,6 +155,10 @@ def objective(trial):
     val_losses = []
     val_accuracies = []
 
+    # Listen für Verwechslungsmatrix
+    all_val_labels = []
+    all_val_preds = []
+
     # Training
     best_acc = 0.0
     best_model_wts = copy.deepcopy(model_ft.state_dict())
@@ -161,6 +183,7 @@ def objective(trial):
             optimizer_ft.step()
             running_loss += loss.item() * inputs.size(0)
             running_corrects += (preds == labels).sum().item()
+
         train_loss = running_loss / dataset_sizes['train']
         train_acc = running_corrects / dataset_sizes['train']
         train_losses.append(train_loss)
@@ -171,14 +194,18 @@ def objective(trial):
         model_ft.eval()
         running_loss = 0.0
         running_corrects = 0
-        with torch.no_grad():
-            for inputs, labels in tqdm(dataloaders['val'], desc="Val-Phase"):
-                inputs, labels = inputs.to(device), labels.to(device)
-                outputs = model_ft(inputs)
-                _, preds = torch.max(outputs, 1)
-                loss = loss_fn(outputs, labels)
-                running_loss += loss.item() * inputs.size(0)
-                running_corrects += (preds == labels).sum().item()
+        for inputs, labels in tqdm(dataloaders['val'], desc="Val-Phase"):
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model_ft(inputs)
+            _, preds = torch.max(outputs, 1)
+            loss = loss_fn(outputs, labels)
+            running_loss += loss.item() * inputs.size(0)
+            running_corrects += (preds == labels).sum().item()
+
+            # Speichern für Verwechslungsmatrix
+            all_val_labels.extend(labels.cpu().numpy())
+            all_val_preds.extend(preds.cpu().numpy())
+
         val_loss = running_loss / dataset_sizes['val']
         val_acc = running_corrects / dataset_sizes['val']
         val_losses.append(val_loss)
@@ -221,6 +248,16 @@ def objective(trial):
     results_csv_path = os.path.join(trial_results_dir, f'results_trial_{trial.number}.csv')
     results_df.to_csv(results_csv_path, index=False)
     logger.info(f"Ergebnisse als CSV gespeichert: {results_csv_path}")
+
+    # Verwechslungsmatrix erstellen und speichern
+    plot_confusion_matrix(all_val_labels, all_val_preds, class_names, trial_results_dir, trial.number)
+
+    # Klassifikationsbericht erstellen und speichern
+    report = classification_report(all_val_labels, all_val_preds, target_names=class_names, output_dict=True)
+    report_df = pd.DataFrame(report).transpose()
+    report_csv_path = os.path.join(trial_results_dir, f'classification_report_trial_{trial.number}.csv')
+    report_df.to_csv(report_csv_path, index=True)
+    logger.info(f"Klassifikationsbericht als CSV gespeichert: {report_csv_path}")
 
     model_ft.load_state_dict(best_model_wts)
     logger.info(f"Training abgeschlossen. Beste Accuracy: {best_acc:.4f}")
