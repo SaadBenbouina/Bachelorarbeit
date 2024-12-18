@@ -30,8 +30,12 @@ class ShipLabelFilter:
             label = None
         if 'Great Lakes Tugs, Barges and Work Boats' in label:
             label = None
+        if 'Supply Ships/Tug Supplies/AHTS' in label:
+            label = None
+        if 'mystery' in label:
+            label = None
         if label is None:
-            return label
+            return "label"
 
         if 'livestock' in label:
             label = 'cargo_ship'
@@ -114,10 +118,6 @@ class ShipLabelFilter:
             label = 'cargo_ship'
         if 'steam' in label:
             label = 'ferry'
-        if 'storm' in label:
-            label = 'fishing_ship'
-        if 'mystery' in label:
-            label = 'sailing_ship'
         if 'coast_guard' in label:
             label = 'order'
         if 'police' in label:
