@@ -15,40 +15,38 @@ class ShipLabelFilter:
         """
         label = label.lower().replace(" ", "_")
         if 'overview' in label:
-            label = "unkown"
+            label = None
         if 'wheelhouse' in label:
-            label = "unkown"
+            label = None
         if 'deck' in label:
-            label = "unkown"
+            label = None
         if 'museum' in label:
-            label = "unkown"
+            label = None
         if 'arma' in label:
-            label = "unkown"
+            label = None
         if 'interior' in label:
-            label = "unkown"
+            label = None
         if 'crests' in label:
-            label = "unkown"
+            label = None
+        if 'Great Lakes Tugs, Barges and Work Boats' in label:
+            label = None
         if label is None:
-            return "unkown"
+            return label
 
         if 'livestock' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'combined' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'crew_vessel' in label:
-            label = 'utility_ship'
+            label = 'work_boat'
         if 'wood_chip' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'service_craft' in label:
             label = 'military'
         if 'sd_14' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'drill' in label:
-            label = 'utility_ship'
-        if 'casult' in label:
-            label = 'maintenance'
-        if 'maintenance' in label:
-            label = 'maitenance'
+            label = 'work_boat'
         if 'battle' in label:
             label = 'military'
         if 'auxiliar' in label:
@@ -60,75 +58,66 @@ class ShipLabelFilter:
         if 'carrier' in label:
             label = 'military'
         if 'lifeboat' in label:
-            label = 'small_boat'
-        if 'wrecks' in label:
-            label = 'maintenance'
+            label = 'rescue_boat'
+
         if 'cargo_ship' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'container' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'tank' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'bulk' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'fish' in label:
-            label = 'utility_ship'
+            label = 'fishing_ship'
         if 'cruise' in label:
             label = 'ferry'
         if 'reefer' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'tanker' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'sailing' in label:
             label = 'sailing_ship'
-        if 'motor' in label:
-            label = 'unkown'
         if 'tug' in label:
-            label = 'small_boat'
+            label = 'work_boat'
         if 'vehicle_carrier' in label:
-            label = 'freight_ship'
-        if 'work' in label:
-            label = 'utility_ship'
+            label = 'cargo_ship'
+        if 'work_boat' in label:
+            label = 'work_boat'
         if 'passenger' in label:
             label = 'ferry'
         if 'ferr' in label:
             label = 'ferry'
         if 'barge' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'rescue' in label:
-            label = 'small_boat'
+            label = 'rescue_boat'
         if 'attack' in label:
             label = 'military'
         if 'ro' in label:
-            label = 'freight_ship'
-        if 'scrap' in label:
-            label = 'maintenance'
-        if 'repair' in label:
-            label = 'maintenance'
-        if 'construction' in label:
-            label = 'maintenance'
+            label = 'cargo_ship'
         if 'tour' in label:
             label = 'ferry'
         if 'cement' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'submarine' in label:
             label = 'submarine'
         if 'general_cargo' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'landing_craft' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'landing_ship' in label:
             label = 'military'
         if 'high_speed' in label:
             label = 'ferry'
-        if 'reclassified' in label:
-            label = 'unkown'
         if 'aggregates_carrier' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'steam' in label:
             label = 'ferry'
         if 'storm' in label:
-            label = 'utility_ship'
+            label = 'fishing_ship'
+        if 'mystery' in label:
+            label = 'sailing_ship'
         if 'coast_guard' in label:
             label = 'order'
         if 'police' in label:
@@ -138,24 +127,11 @@ class ShipLabelFilter:
         if 'patrol' in label:
             label = 'order'
         if 'vehicle' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'ore' in label:
-            label = 'freight_ship'
+            label = 'cargo_ship'
         if 'whale' in label:
-            label = 'utility_ship'
-        if 'museum' in label:
-            label = 'unkown'
-        if 'shipping' in label:
-            label = 'unkown'
+            label = 'fishing_ship'
         if 'dry_cargo' in label:
             label = 'cargo_ship'
-        if 'dredgers' in label:
-            label = 'maintenance'
-        if 'inland_dry_cargo' in label:
-            label = 'freight_ship'
-        if 'pilot_vessel' in label:
-            label = 'utility_ship'
-        if 'corvettes' in label:
-            label = 'military'
-
         return label
