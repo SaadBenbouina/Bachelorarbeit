@@ -15,25 +15,25 @@ class ShipLabelFilter:
         """
         label = label.lower().replace(" ", "_")
         if 'overview' in label:
-            label = None
+            label = "notDefined"
         if 'wheelhouse' in label:
-            label = None
+            label = "notDefined"
         if 'deck' in label:
-            label = None
+            label = "notDefined"
         if 'museum' in label:
-            label = None
+            label = "notDefined"
         if 'arma' in label:
-            label = None
+            label = "notDefined"
         if 'interior' in label:
-            label = None
+            label = "notDefined"
         if 'crests' in label:
-            label = None
+            label = "notDefined"
         if 'great_lakes_tugs' in label:
-            label = None
+            label = "notDefined"
         if 'supply_ships/tug' in label:
-            label = None
+            label = "notDefined"
         if 'mystery' in label:
-            label = None
+            label = "notDefined"
         if label is None:
             return label
 
