@@ -28,14 +28,14 @@ class ShipLabelFilter:
             label = None
         if 'crests' in label:
             label = None
-        if 'Great Lakes Tugs, Barges and Work Boats' in label:
+        if 'great_lakes_tugs' in label:
             label = None
-        if 'Supply Ships/Tug Supplies/AHTS' in label:
+        if 'supply_ships/tug' in label:
             label = None
         if 'mystery' in label:
             label = None
         if label is None:
-            return "label"
+            return label
 
         if 'livestock' in label:
             label = 'cargo_ship'
