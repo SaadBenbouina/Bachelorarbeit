@@ -45,8 +45,6 @@ class ShipLabelFilter:
             label = 'work_boat'
         if 'wood_chip' in label:
             label = 'cargo_ship'
-        if 'service_craft' in label:
-            label = 'military'
         if 'sd_14' in label:
             label = 'cargo_ship'
         if 'cargo_ship' in label:
@@ -89,6 +87,8 @@ class ShipLabelFilter:
         if 'work_boat' in label:
             label = 'work_boat'
 
+        if 'service_craft' in label:
+            label = 'military'
         if 'battle' in label:
             label = 'military'
         if 'auxiliar' in label:
