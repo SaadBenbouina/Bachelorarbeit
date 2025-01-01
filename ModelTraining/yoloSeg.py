@@ -5,25 +5,26 @@ from ultralytics import YOLO
 def objective(trial):
     # Hyperparameter definieren und Grenzen angeben
     epochs = trial.suggest_int("epochs", 30, 60)  # Anzahl der Epochen
-    batch_size = trial.suggest_int("batch", 4, 16)  # Batch-Größe
+    batch_size = trial.suggest_int("batch", 4, 16, 32)  # Batch-Größe
     learning_rate = trial.suggest_float("lr0", 1e-4, 1e-2, log=True)  # Lernrate
-    img_size = trial.suggest_categorical("imgsz", [320, 480, 640])  # Bildgröße
+    img_size = trial.suggest_categorical("imgsz", [480, 640,800])  # Bildgröße
 
     # YOLO-Modell laden
-    model = YOLO('/content/drive/MyDrive/optuna_trial_2/weights/best.pt')
+    model = YOLO('yolov8l-seg.pt')
 
     try:
         # Training starten
         results = model.train(
-            data='/content/drive/MyDrive/config.yaml',  # Pfad zur YAML-Datei
+            data='/content/drive/MyDrive/Colab Notebooks/config.yaml',  # Pfad zur YAML-Datei
             epochs=epochs,  # Anzahl der Epochen
             batch=batch_size,  # Batch-Größe
             imgsz=img_size,  # Bildgröße
             lr0=learning_rate,  # Lernrate
             name=f"optuna_trial_{trial.number}",  # Name des Trials
-            project="/content/drive/MyDrive/optuna_resultsnew33",  # Ergebnisse speichern
+            project="/content/drive/MyDrive/optuna_resultsnew55",  # Ergebnisse speichern
             task='segment',  # Segmentierungsaufgabe
-            patience=8  # Early Stopping: Abbruch nach 8 Epochen ohne Verbesserung
+            patience=8,  # Early Stopping: Abbruch nach 8 Epochen ohne Verbesserung
+            optimizer='auto',
         )
 
         # Validierungs-mAP (z. B. mAP@50) extrahieren
@@ -45,4 +46,4 @@ print("Beste Parameter:", study.best_params)
 print("Beste mAP:", study.best_value)
 
 # Ergebnisse speichern
-study.trials_dataframe().to_csv("/content/drive/MyDrive/optuna_results.csv")
+study.trials_dataframe().to_csv("/content/drive/MyDrive/optuna_results55.csv")
