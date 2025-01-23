@@ -9,7 +9,7 @@ import logging
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-from Pipeline.ShipLabelFilter import ShipLabelFilter
+from DownloadData.ShipLabelFilter import ShipLabelFilter
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
