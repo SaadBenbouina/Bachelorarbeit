@@ -7,7 +7,7 @@ def objective(trial):
     epochs = trial.suggest_int("epochs", 30, 60)  # Anzahl der Epochen
     batch_size = trial.suggest_int("batch", 4, 16, 32)  # Batch-Größe
     learning_rate = trial.suggest_float("lr0", 1e-4, 1e-2, log=True)  # Lernrate
-    img_size = trial.suggest_categorical("imgsz", [480, 640,800])  # Bildgröße
+    img_size = trial.suggest_categorical("imgsz", [480, 640, 800])  # Bildgröße
 
     # YOLO-Modell laden
     model = YOLO('yolov8l-seg.pt')
