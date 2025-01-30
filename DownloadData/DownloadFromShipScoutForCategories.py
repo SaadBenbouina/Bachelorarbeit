@@ -232,9 +232,9 @@ def main():
     - Lädt Bilder und Labels von ShipSpotting
     - Speichert sie in Kategoriefolder
     """
-    start_id = 3774385
-    end_id = 3774389
-    download_folder = "Pictures"
+    start_id = 274385
+    end_id = 275389
+    download_folder = "RawPicturesForCategory"
     processed_boats_dir = "Kategory/train"
 
     for process_id in range(start_id, end_id):

@@ -11,9 +11,12 @@ class ShipLabelFilter:
             label (str): The label to be filtered.
 
         Returns:
-            str: The filtered and standardized label.
+            str: The filtered label, oder 'notDefined', wenn es in keine bekannte Kategorie passt.
         """
+        # Alles klein schreiben und Leerzeichen durch Unterstriche ersetzen
         label = label.lower().replace(" ", "_")
+
+        # Reihenfolge: Erst bestimmte Begriffe auf 'notDefined' setzen
         if 'overview' in label:
             label = "notDefined"
         if 'wheelhouse' in label:
@@ -34,9 +37,12 @@ class ShipLabelFilter:
             label = "notDefined"
         if 'mystery' in label:
             label = "notDefined"
+
+        # Wenn label jetzt bereits None ist, zurückgeben
         if label is None:
             return label
 
+        # Nun alle Zuordnungen durchführen
         if 'livestock' in label:
             label = 'cargo_ship'
         if 'combined' in label:
@@ -141,5 +147,16 @@ class ShipLabelFilter:
 
         if 'sailing' in label:
             label = 'sailing_ship'
+
+        # Abschließende Kontrolle, welche Labels akzeptiert werden
+        known_labels = {
+            'cargo_ship', 'work_boat', 'military', 'rescue_boat', 'ferry',
+            'order', 'fishing_ship', 'submarine', 'sailing_ship', 'notDefined'
+        }
+
+        # Nur wenn das Ergebnis in known_labels ist, behalten wir es.
+        # Sonst markieren wir es als 'notDefined'.
+        if label not in known_labels:
+            label = 'notDefined'
 
         return label
