@@ -9,7 +9,7 @@ import torch.nn as nn
 import os
 import logging
 from Pipeline.Mapper import map_number_to_ship
-from Pipeline.ship_image_scraper import scrape_image_selenium as scrape_image  # Selenium-basierte Funktion importieren
+from Pipeline.ship_image_scraper import scrape_image_selenium as scrape_image
 import time
 
 # Konfiguration des Loggings
@@ -128,7 +128,6 @@ def main():
     # Pfad zu den gespeicherten Gewichten
 
     model_save_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/trial_7_category/best_model_trial_7.pth"
-
 
     if not os.path.exists(model_save_path):
         logger.error(f"Klassifikationsmodell nicht gefunden am Pfad: {model_save_path}")

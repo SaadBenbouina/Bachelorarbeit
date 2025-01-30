@@ -7,7 +7,7 @@ import copy
 import logging
 import optuna
 from sklearn.utils.class_weight import compute_class_weight
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
+from sklearn.metrics import confusion_matrix, classification_report
 import numpy as np
 from tqdm import tqdm
 import pandas as pd
