@@ -89,7 +89,7 @@ def process_image(image, yolo_model, detection_labels, model_classification, dev
         return None, None
 
     # Speichere das verarbeitete Bild und die XML-Daten
-    image_path = save_image(image_np, "output2", f"{process_id}_processed.jpg")
+    image_path = save_image(image_np, "output", f"{process_id}_processed.jpg")
 
     return image_path
 
@@ -145,7 +145,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Verwende Gerät: {device}")
 
-    yolo_model = YOLO('/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/optuna_trial_56_yolo/weights/best.pt')
+    yolo_model = YOLO('/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/yolo_model/weights/best.pt')
     # Überprüfen Sie, ob YOLO das Gerät setzen kann
     if hasattr(yolo_model, 'to'):
         yolo_model.to(device)
@@ -159,7 +159,7 @@ def main():
     model_classification.fc = nn.Linear(num_ftrs, num_classes)
 
     # Pfad zu den gespeicherten Gewichten
-    model_save_path = "/Users/saadbenboujina/Desktop/Projects/bachelor arbeit/trial_7_category/best_model_trial_7.pth"
+    model_save_path = "/private/var/folders/3m/k2m2bg694w15lfb_1kz6blvh0000gn/T/wzQL.Cf1otW/Bachelorarbeit/category_model/best_model_trial_6.pth"
 
     if not os.path.exists(model_save_path):
         logger.error(f"Klassifikationsmodell nicht gefunden am Pfad: {model_save_path}")

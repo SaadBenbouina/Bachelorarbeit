@@ -1,7 +1,7 @@
 ship_mapping = [
-    "ferry", "freight_ship", "maintenance", "military",
-    "order", "sailing_ship", "small_boat",
-    "submarine", "utility_boat"
+    "cargo_ship", "ferry", "fishing_ship", "military",
+    "order", "rescue_boat", "sailing_ship",
+    "submarine", "work_boat"
 ]
 
 
